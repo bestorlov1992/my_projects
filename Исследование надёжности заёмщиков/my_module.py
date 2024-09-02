@@ -64,7 +64,11 @@ def make_widget_summary(column):
     column_name = column.name
     values = column.count()
     values = pretty_value(column.count())
-    values_pct = round(column.count() * 100 / column.size)
+    values_pct = column.count() * 100 / column.size
+    if values_pct > 99 and values_pct < 100:
+        values_pct = round(values_pct, 1)
+    else:
+        values_pct = round(values_pct)
     values = f'{values} ({values_pct}%)'
     missing = column.isna().sum()
     if missing == 0:
@@ -74,7 +78,13 @@ def make_widget_summary(column):
         missing_pct = round(column.isna().sum() * 100 / column.size)
         missing = f'{missing} ({missing_pct}%)'
     distinct = pretty_value(column.nunique())
-    distinct_pct = round(column.nunique() * 100 / column.size)
+    distinct_pct = column.nunique() * 100 / column.size
+    if distinct_pct > 99 and distinct_pct < 100:
+        valudistinct_pctes_pct = round(distinct_pct, 1)
+    else:
+        distinct_pct = round(distinct_pct)
+    if distinct_pct == 0:
+        distinct_pct = '<1'
     distinct = f'{distinct} ({distinct_pct}%)'
     zeros = ((column == 0) | (column == '')).sum()
     if zeros == 0:
@@ -96,7 +106,11 @@ def make_widget_summary(column):
         duplicates = '---'
     else:
         duplicates = pretty_value(duplicates)
-        duplicates_pct = round(column.duplicated().sum() * 100 / column.size)
+        duplicates_pct = column.duplicated().sum() * 100 / column.size
+        if duplicates_pct > 99 and duplicates_pct < 100:
+            duplicates_pct = round(duplicates_pct, 1)
+        else:
+            duplicates_pct = round(duplicates_pct)
         duplicates = f'{duplicates} ({duplicates_pct}%)'
     ram = round(column.__sizeof__() / 1_048_576)
     if ram == 0:
@@ -179,8 +193,14 @@ def make_widget_value_counts(column):
     val_cnt_norm = column.value_counts(normalize=True).iloc[:7]
     column_name_pct = column_name + '_pct'
     val_cnt_norm.name = column_name_pct
+    def make_value_counts_row(x):
+        if x[column_name_pct] < 0.01:
+            pct_str = '<1%'
+        else:
+            pct_str = f'({x[column_name_pct]:.0%})'
+        return f'{x[column_name]:.0f} {pct_str}'
     top_5 = pd.concat([val_cnt, val_cnt_norm], axis=1).apply(
-        lambda x: f'{x[column_name]:.0f} ({x[column_name_pct]:.0%})', axis=1).reset_index()
+        make_value_counts_row, axis=1).reset_index()
     widget_value_counts = widgets.Output()
     with widget_value_counts:
         display(top_5.style
@@ -235,6 +255,23 @@ def make_widget_hist(column):
     return widget_hist
 
 
+def make_widget_hist_plotly(column):
+    fig = px.histogram(column, nbins=20, histnorm='percent',
+                       template="simple_white", height=250, width=370)
+    fig.update_traces(marker_color='MediumPurple', text=f'*',
+                      textfont=dict(color='MediumPurple'))
+    fig.update_layout(
+        margin=dict(l=0, r=10, b=0, t=10), showlegend=False, hoverlabel=dict(
+            bgcolor="white",
+        ), xaxis_title="", yaxis_title=""
+    )
+    # fig.layout.yaxis.visible = False
+    widget_hist = widgets.Output()
+    with widget_hist:
+        fig.show(config=dict(displayModeBar=False), renderer="png")
+    return widget_hist
+
+
 def make_widget_violin(column):
     fig, ax = plt.subplots(figsize=(2, 2.44))
     sns.violinplot(column, ax=ax, color='#9370db')
@@ -254,6 +291,134 @@ def make_widget_violin(column):
     return widget_violin
 
 
+def make_widget_violine_plotly(column):
+    fig = px.violin(column, template="simple_white", height=250, width=300)
+    fig.update_traces(marker_color='MediumPurple')
+    fig.update_layout(
+        margin=dict(l=20, r=20, b=0, t=10), showlegend=False, hoverlabel=dict(
+            bgcolor="white",
+        ), xaxis_title="", yaxis_title="", xaxis=dict(ticks='', showticklabels=False)
+    )
+    # fig.layout.yaxis.visible = False
+    widget_hist = widgets.Output()
+    with widget_hist:
+        fig.show(config=dict(displayModeBar=False), renderer="png")
+    return widget_hist
+
+
+def make_widget_summary_obj(column):
+    column_name = column.name
+    values = column.count()
+    values = pretty_value(column.count())
+    values_pct = column.count() * 100 / column.size
+    if values_pct > 99 and values_pct < 100:
+        values_pct = round(values_pct, 1)
+    else:
+        values_pct = round(values_pct)
+    values = f'{values} ({values_pct}%)'
+    missing = column.isna().sum()
+    if missing == 0:
+        missing = '---'
+    else:
+        missing = pretty_value(column.isna().sum())
+        missing_pct = round(column.isna().sum() * 100 / column.size)
+        missing = f'{missing} ({missing_pct}%)'
+    distinct = pretty_value(column.nunique())
+    distinct_pct = column.nunique() * 100 / column.size
+    if distinct_pct > 99 and distinct_pct < 100:
+        valudistinct_pctes_pct = round(distinct_pct, 1)
+    else:
+        distinct_pct = round(distinct_pct)
+    if distinct_pct == 0:
+        distinct_pct = '<1'
+    distinct = f'{distinct} ({distinct_pct}%)'
+    zeros = ((column == 0) | (column == '')).sum()
+    if zeros == 0:
+        zeros = '---'
+    else:
+        zeros = pretty_value(((column == 0) | (column == '')).sum())
+        zeros_pct = round(((column == 0) | (column == '')
+                           ).sum() * 100 / column.size)
+        zeros = f'{zeros} ({zeros_pct}%)'
+    duplicates = column.duplicated().sum()
+    if duplicates == 0:
+        duplicates = '---'
+    else:
+        duplicates = pretty_value(duplicates)
+        duplicates_pct = column.duplicated().sum() * 100 / column.size
+        if duplicates_pct > 99 and duplicates_pct < 100:
+            duplicates_pct = round(duplicates_pct, 1)
+        else:
+            duplicates_pct = round(duplicates_pct)
+        duplicates = f'{duplicates} ({duplicates_pct}%)'
+    ram = round(column.__sizeof__() / 1_048_576)
+    if ram == 0:
+        ram = '<1 Mb'
+    column_summary = pd.DataFrame({
+        'Values': [values], 'Missing': [missing], 'Distinct': [distinct], 'Duplicates': [duplicates], 'Empty': [zeros], 'RAM (Mb)': [ram]
+    })
+    widget_summary_obj = widgets.Output()
+    with widget_summary_obj:
+        # display_html(f'<h4>{column_name}</h4>', raw=True)
+        display(column_summary.T.reset_index().style
+                .set_caption(f'{column_name}')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '16px'), ("text-align", "left"), ("font-weight", "bold")]
+                                    }])
+                .set_properties(**{'text-align': 'left'})
+                .hide_columns()
+                .hide_index()
+                )
+    return widget_summary_obj
+
+
+def make_widget_value_counts_obj(column):
+    column_name = column.name
+    val_cnt = column.value_counts().iloc[:7]
+    val_cnt_norm = column.value_counts(normalize=True).iloc[:7]
+    column_name_pct = column_name + '_pct'
+    val_cnt_norm.name = column_name_pct
+    def make_value_counts_row(x):
+        if x[column_name_pct] < 0.01:
+            pct_str = '<1%'
+        else:
+            pct_str = f'({x[column_name_pct]:.0%})'
+        return f'{x[column_name]:.0f} {pct_str}'
+    top_5 = pd.concat([val_cnt, val_cnt_norm], axis=1).apply(
+        make_value_counts_row, axis=1).reset_index()
+    widget_value_counts_obj = widgets.Output()
+    with widget_value_counts_obj:
+        display(top_5.style
+                # .set_caption(f'Value counts top')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '16px'), ("text-align", "left")]
+                                    }])
+                .set_properties(**{'text-align': 'left'})
+                .hide_columns()
+                .hide_index()
+                )
+    # widget_value_counts.
+    return widget_value_counts_obj
+
+
+def make_widget_bar_obj(column):
+    df_fig = column.value_counts(ascending=True).iloc[-10:]
+    text_labels = [label[:30] for label in df_fig.index.to_list()]
+    fig = px.bar(df_fig, orientation='h',
+                 template="simple_white", height=220, width=500)
+    fig.update_traces(marker_color='MediumPurple')
+    fig.update_layout(
+        margin=dict(l=0, r=0, b=0, t=5), showlegend=False, hoverlabel=dict(
+            bgcolor="white",
+        ), xaxis_title="", yaxis_title="")
+    fig.update_traces(y=text_labels)
+    widget_bar_obj = widgets.Output()
+    # fig.tight_layout()
+    with widget_bar_obj:
+        fig.show(config=dict(displayModeBar=False), renderer="png")
+    return widget_bar_obj
+
+
 def make_hbox(widgets_: list):
     # add some CSS styles to distribute free space
     hbox_layout = Layout(display='flex',
@@ -268,7 +433,7 @@ def make_hbox(widgets_: list):
     return hbox
 
 
-def my_info(df, graphs=True):
+def my_info(df, graphs=True, num=True, obj=True):
     '''
     Функция выводить информацию о датафрейме
     Четвертый столбцев (перед графиками) Value counts
@@ -278,6 +443,8 @@ def my_info(df, graphs=True):
     graphs: bool, default True
     Если True, то выводятся графики. 
     '''
+    if not num and not obj:
+        return
     vbox_layout = Layout(display='flex',
                          # flex_flow='column',
                          justify_content='space-around',
@@ -285,19 +452,83 @@ def my_info(df, graphs=True):
                          # grid_gap = '20px',
                          # align_items = 'flex-end'
                          )
-    funcs = [make_widget_summary, make_widget_pct,
-             make_widget_std, make_widget_value_counts]
+    boxes = []
+    funcs_num = [make_widget_summary, make_widget_pct,
+                 make_widget_std, make_widget_value_counts]
+    func_obj = [make_widget_summary_obj, make_widget_value_counts_obj]
     if graphs:
-        funcs += [make_widget_hist, make_widget_violin]
-    num_columns = filter(
-        lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns)
-    vboxes = []
-    for column in tqdm(num_columns):
-        widgets_ = [func(df[column]) for func in funcs]
-        vboxes.extend((widgets_))
+        funcs_num += [make_widget_hist_plotly, make_widget_violine_plotly]
+        func_obj += [make_widget_bar_obj]
+    if num:
+        num_columns = filter(
+            lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns)
+        for column in tqdm(num_columns):
+            widgets_ = [func(df[column]) for func in funcs_num]
+            boxes.extend((widgets_))
         layout = widgets.Layout(
             grid_template_columns='auto auto auto auto auto auto')
+        num_grid = widgets.GridBox(boxes, layout=layout)
+    if obj:
+        obj_columns = filter(
+            lambda x: not pd.api.types.is_numeric_dtype(df[x]), df.columns)
+        for column in tqdm(obj_columns):
+            widgets_ = [func(df[column]) for func in func_obj]
+            boxes.extend((widgets_))
+        layout = widgets.Layout(
+            grid_template_columns='auto auto auto')
+        obj_grid = widgets.GridBox(boxes, layout=layout)
+
     # widgets.Layout(grid_template_columns="200px 200px 200px 200px 200px 200px")))
     display(make_widget_all_frame(df))
-    display(widgets.GridBox(vboxes, layout=layout))
-    # display(widgets.VBox(vboxes))
+    if num:
+        display(num_grid)
+    if obj:
+        display(obj_grid)
+
+def my_info_gen(df, graphs=True, num=True, obj=True):
+    '''
+    Генератор выводить информацию о датафрейме
+    Четвертый столбцев (перед графиками) Value counts
+    Parameters
+    df: pandas.DataFrame
+    Датафрейм с данными
+    graphs: bool, default True
+    Если True, то выводятся графики. 
+    '''
+    if not num and not obj:
+        return
+    vbox_layout = Layout(display='flex',
+                         # flex_flow='column',
+                         justify_content='space-around',
+                         # width='auto',
+                         # grid_gap = '20px',
+                         # align_items = 'flex-end'
+                         )
+    display(make_widget_all_frame(df))
+    yield
+
+    funcs_num = [make_widget_summary, make_widget_pct,
+                 make_widget_std, make_widget_value_counts]
+    func_obj = [make_widget_summary_obj, make_widget_value_counts_obj]
+    if graphs:
+        funcs_num += [make_widget_hist_plotly, make_widget_violine_plotly]
+        func_obj += [make_widget_bar_obj]
+    if num:
+        num_columns = filter(
+            lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns)
+        layout = widgets.Layout(
+            grid_template_columns='auto auto auto auto auto auto')
+        for column in tqdm(num_columns):
+            widgets_ = [func(df[column]) for func in funcs_num]
+            display(widgets.GridBox(boxes, layout=layout))
+            yield
+    if obj:
+        obj_columns = filter(
+            lambda x: not pd.api.types.is_numeric_dtype(df[x]), df.columns)
+        for column in tqdm(obj_columns):
+            widgets_ = [func(df[column]) for func in func_obj]
+            boxes.extend((widgets_))
+        layout = widgets.Layout(
+            grid_template_columns='auto auto auto')
+        obj_grid = widgets.GridBox(boxes, layout=layout)
+
