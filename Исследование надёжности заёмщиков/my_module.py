@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from ipywidgets import widgets, Layout
 from IPython.display import display, display_html, display_markdown
 from tqdm.auto import tqdm
+import re
+import itertools
 
 
 def pretty_value(value):
@@ -38,8 +40,40 @@ def pretty_value(value):
 
 
 def make_widget_all_frame(df):
+    dupl = df.duplicated().sum()
+    duplicates = dupl
+    if duplicates == 0:
+        duplicates = '---'
+    else:
+        duplicates = pretty_value(duplicates)
+        duplicates_pct = dupl * 100 / df.shape[0]
+        if 0 < duplicates_pct < 1:
+            duplicates_pct = '<1'
+        elif duplicates_pct > 99 and duplicates_pct < 100:
+            duplicates_pct = round(duplicates_pct, 1)
+            if duplicates_pct == 100:
+                duplicates_pct = 99.9
+        else:
+            duplicates_pct = round(duplicates_pct)
+        duplicates = f'{duplicates} ({duplicates_pct}%)'
+    regex = re.compile(r'\s+')
+    dupl_keep_false = df.duplicated(keep=False).sum()
+    dupl_sub = df.applymap(lambda x: regex.sub(' ', x.lower().strip()) if isinstance(
+        x, str) else x).duplicated(keep=False).sum()
+    duplicates_sub_minis_origin = pretty_value(dupl_sub - dupl_keep_false)
+    duplicates_sub_minis_origin_pct = (
+        dupl_sub - dupl_keep_false) * 100 / dupl
+    if 0 < duplicates_sub_minis_origin_pct < 1:
+        duplicates_sub_minis_origin_pct = '<1'
+    elif (duplicates_sub_minis_origin_pct > 99 and duplicates_sub_minis_origin_pct < 100):
+        duplicates_sub_minis_origin_pct = round(
+            duplicates_sub_minis_origin_pct, 1)
+    else:
+        duplicates_sub_minis_origin_pct = round(
+            duplicates_sub_minis_origin_pct)
+    duplicates_sub_minis_origin = f'{duplicates_sub_minis_origin} ({duplicates_sub_minis_origin_pct}%)'
     all_rows = pd.DataFrame({
-        'Rows': [pretty_value(df.shape[0])], 'Features': [df.shape[1]], 'RAM (Mb)': [round(df.__sizeof__() / 1_048_576)], 'Duplicates': [df.duplicated().sum()]
+        'Rows': [pretty_value(df.shape[0])], 'Features': [df.shape[1]], 'RAM (Mb)': [round(df.__sizeof__() / 1_048_576)], 'Duplicates': [duplicates], 'Dupl (sub - origin)': [duplicates_sub_minis_origin]
     })
     # widget_DataFrame = widgets.Output()
     # with widget_DataFrame:
@@ -60,13 +94,42 @@ def make_widget_all_frame(df):
     return widget_all_frame
 
 
-def make_widget_summary(column):
+def make_widget_range_date(column):
+    column_name = column.name
+    fist_date = column.min()
+    last_date = column.max()
+    ram = round(column.__sizeof__() / 1_048_576)
+    if ram == 0:
+        ram = '<1 Mb'
+    column_summary = pd.DataFrame({
+        'First date': [fist_date], 'Last date': [last_date], 'RAM (Mb)': [ram]
+    })
+    widget_summary = widgets.Output()
+    with widget_summary:
+        # display_html(f'<h4>{column_name}</h4>', raw=True)
+        display(column_summary.T.reset_index().style
+                .set_caption(f'{column_name}')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '16px'), ("text-align", "left"), ("font-weight", "bold")]
+                                    }])
+                .set_properties(**{'text-align': 'left'})
+                .hide_columns()
+                .hide_index()
+                )
+    return widget_summary
+
+
+def make_widget_summary_date(column):
     column_name = column.name
     values = column.count()
     values = pretty_value(column.count())
     values_pct = column.count() * 100 / column.size
-    if values_pct > 99 and values_pct < 100:
+    if 0 < values_pct < 1:
+        values_pct = '<1'
+    elif values_pct > 99 and values_pct < 100:
         values_pct = round(values_pct, 1)
+        if values_pct == 100:
+            values_pct = 99.9
     else:
         values_pct = round(values_pct)
     values = f'{values} ({values_pct}%)'
@@ -76,11 +139,143 @@ def make_widget_summary(column):
     else:
         missing = pretty_value(column.isna().sum())
         missing_pct = round(column.isna().sum() * 100 / column.size)
+        if missing_pct == 0:
+            missing_pct = '<1'
         missing = f'{missing} ({missing_pct}%)'
     distinct = pretty_value(column.nunique())
     distinct_pct = column.nunique() * 100 / column.size
     if distinct_pct > 99 and distinct_pct < 100:
-        valudistinct_pctes_pct = round(distinct_pct, 1)
+        distinct_pct = round(distinct_pct, 1)
+        if distinct_pct == 100:
+            distinct_pct = 99.9
+    else:
+        distinct_pct = round(distinct_pct)
+    if distinct_pct == 0:
+        distinct_pct = '<1'
+    distinct = f'{distinct} ({distinct_pct}%)'
+    duplicates = column.duplicated().sum()
+    if duplicates == 0:
+        duplicates = '---'
+    else:
+        duplicates = pretty_value(duplicates)
+        duplicates_pct = column.duplicated().sum() * 100 / column.size
+        if 0 < duplicates_pct < 1:
+            duplicates_pct = '<1'
+        elif duplicates_pct > 99 and duplicates_pct < 100:
+            duplicates_pct = round(duplicates_pct, 1)
+            if duplicates_pct == 100:
+                duplicates_pct = 99.9
+        else:
+            duplicates_pct = round(duplicates_pct)
+        duplicates = f'{duplicates} ({duplicates_pct}%)'
+    column_summary = pd.DataFrame({
+        'Values': [values], 'Missing': [missing], 'Distinct': [distinct], 'Duplicates': [duplicates]
+    })
+    widget_summary = widgets.Output()
+    with widget_summary:
+        # display_html(f'<h4>{column_name}</h4>', raw=True)
+        display(column_summary.T.reset_index().style
+                # .set_caption(f'{column_name}')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '16px'), ("text-align", "left"), ("font-weight", "bold")]
+                                    }])
+                .set_properties(**{'text-align': 'left'})
+                .hide_columns()
+                .hide_index()
+                )
+    return widget_summary
+
+
+def make_widget_check_missing_date(column):
+    column_name = column.name
+    fist_date = column.min()
+    last_date = column.max()
+    date_range = pd.date_range(start=fist_date, end=last_date, freq='D')
+    years = date_range.year.unique()
+    years_missed_pct = (~years.isin(column.dt.year.unique())
+                        ).sum() * 100 / years.size
+    if 0 < years_missed_pct < 1:
+        years_missed_pct = '<1'
+    elif years_missed_pct > 99:
+        years_missed_pct = round(years_missed_pct, 1)
+    else:
+        years_missed_pct = round(years_missed_pct)
+    months = date_range.to_period("M").unique()
+    months_missed_pct = (~months.isin(column.dt.to_period(
+        "M").unique())).sum() * 100 / months.size
+    if 0 < months_missed_pct < 1:
+        months_missed_pct = '<1'
+    elif months_missed_pct > 99:
+        months_missed_pct = round(months_missed_pct, 1)
+    else:
+        months_missed_pct = round(months_missed_pct)
+    weeks = date_range.to_period("W").unique()
+    weeks_missed_pct = (~weeks.isin(column.dt.to_period(
+        "W").unique())).sum() * 100 / weeks.size
+    if 0 < weeks_missed_pct < 1:
+        weeks_missed_pct = '<1'
+    elif weeks_missed_pct > 99:
+        weeks_missed_pct = round(weeks_missed_pct, 1)
+    else:
+        weeks_missed_pct = round(weeks_missed_pct)
+    days = date_range.unique().to_period("D")
+    days_missed_pct = (~days.isin(column.dt.to_period(
+        "D").unique())).sum() * 100 / days.size
+    if 0 < days_missed_pct < 1:
+        days_missed_pct = '<1'
+    elif days_missed_pct > 99:
+        days_missed_pct = round(days_missed_pct, 1)
+    else:
+        days_missed_pct = round(days_missed_pct)
+
+    column_summary = pd.DataFrame({
+        'Years missing': [f'{years_missed_pct}%'], 'Months missing': [f'{months_missed_pct}%'], 'Weeks missing': [f'{weeks_missed_pct}%'], 'Days missing': [f'{days_missed_pct}%']
+    })
+    widget_summary = widgets.Output()
+    with widget_summary:
+        # display_html(f'<h4>{column_name}</h4>', raw=True)
+        display(column_summary.T.reset_index().style
+                # .set_caption(f'{column_name}')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '16px'), ("text-align", "left"), ("font-weight", "bold")]
+                                    }])
+                .set_properties(**{'text-align': 'left'})
+                .hide_columns()
+                .hide_index()
+                # .format('{:.0f}', subset=0)
+                )
+    return widget_summary
+
+
+def make_widget_summary(column):
+    column_name = column.name
+    values = column.count()
+    values = pretty_value(column.count())
+    values_pct = column.count() * 100 / column.size
+    if 0 < values_pct < 1:
+        values_pct = '<1'
+    elif values_pct > 99 and values_pct < 100:
+        values_pct = round(values_pct, 1)
+        if values_pct == 100:
+            values_pct = 99.9
+    else:
+        values_pct = round(values_pct)
+    values = f'{values} ({values_pct}%)'
+    missing = column.isna().sum()
+    if missing == 0:
+        missing = '---'
+    else:
+        missing = pretty_value(column.isna().sum())
+        missing_pct = round(column.isna().sum() * 100 / column.size)
+        if missing_pct == 0:
+            missing_pct = '<1'
+        missing = f'{missing} ({missing_pct}%)'
+    distinct = pretty_value(column.nunique())
+    distinct_pct = column.nunique() * 100 / column.size
+    if distinct_pct > 99 and distinct_pct < 100:
+        distinct_pct = round(distinct_pct, 1)
+        if distinct_pct == 100:
+            distinct_pct = 99.9
     else:
         distinct_pct = round(distinct_pct)
     if distinct_pct == 0:
@@ -93,6 +288,8 @@ def make_widget_summary(column):
         zeros = pretty_value(((column == 0) | (column == '')).sum())
         zeros_pct = round(((column == 0) | (column == '')
                            ).sum() * 100 / column.size)
+        if zeros_pct == 0:
+            zeros_pct = '<1'
         zeros = f'{zeros} ({zeros_pct}%)'
     negative = (column < 0).sum()
     if negative == 0:
@@ -100,6 +297,8 @@ def make_widget_summary(column):
     else:
         negative = pretty_value(negative)
         negative_pct = round((column < 0).sum() * 100 / column.size)
+        if negative_pct == 0:
+            negative_pct = '<1'
         negative = f'{negative} ({negative_pct}%)'
     duplicates = column.duplicated().sum()
     if duplicates == 0:
@@ -107,8 +306,12 @@ def make_widget_summary(column):
     else:
         duplicates = pretty_value(duplicates)
         duplicates_pct = column.duplicated().sum() * 100 / column.size
-        if duplicates_pct > 99 and duplicates_pct < 100:
+        if 0 < duplicates_pct < 1:
+            duplicates_pct = '<1'
+        elif duplicates_pct > 99 and duplicates_pct < 100:
             duplicates_pct = round(duplicates_pct, 1)
+            if duplicates_pct == 100:
+                duplicates_pct = 99.9
         else:
             duplicates_pct = round(duplicates_pct)
         duplicates = f'{duplicates} ({duplicates_pct}%)'
@@ -193,6 +396,7 @@ def make_widget_value_counts(column):
     val_cnt_norm = column.value_counts(normalize=True).iloc[:7]
     column_name_pct = column_name + '_pct'
     val_cnt_norm.name = column_name_pct
+
     def make_value_counts_row(x):
         if x[column_name_pct] < 0.01:
             pct_str = '<1%'
@@ -311,8 +515,12 @@ def make_widget_summary_obj(column):
     values = column.count()
     values = pretty_value(column.count())
     values_pct = column.count() * 100 / column.size
-    if values_pct > 99 and values_pct < 100:
+    if 0 < values_pct < 1:
+        values_pct = '<1'
+    elif values_pct > 99 and values_pct < 100:
         values_pct = round(values_pct, 1)
+        if values_pct == 100:
+            values_pct = 99.9
     else:
         values_pct = round(values_pct)
     values = f'{values} ({values_pct}%)'
@@ -322,11 +530,15 @@ def make_widget_summary_obj(column):
     else:
         missing = pretty_value(column.isna().sum())
         missing_pct = round(column.isna().sum() * 100 / column.size)
+        if missing_pct == 0:
+            missing_pct = '<1'
         missing = f'{missing} ({missing_pct}%)'
     distinct = pretty_value(column.nunique())
     distinct_pct = column.nunique() * 100 / column.size
     if distinct_pct > 99 and distinct_pct < 100:
-        valudistinct_pctes_pct = round(distinct_pct, 1)
+        distinct_pct = round(distinct_pct, 1)
+        if distinct_pct == 100:
+            distinct_pct = 99.9
     else:
         distinct_pct = round(distinct_pct)
     if distinct_pct == 0:
@@ -339,23 +551,53 @@ def make_widget_summary_obj(column):
         zeros = pretty_value(((column == 0) | (column == '')).sum())
         zeros_pct = round(((column == 0) | (column == '')
                            ).sum() * 100 / column.size)
+        if zeros_pct == 0:
+            zeros_pct = '<1'
         zeros = f'{zeros} ({zeros_pct}%)'
     duplicates = column.duplicated().sum()
     if duplicates == 0:
         duplicates = '---'
+        duplicates_sub_minis_origin = '---'
     else:
         duplicates = pretty_value(duplicates)
         duplicates_pct = column.duplicated().sum() * 100 / column.size
-        if duplicates_pct > 99 and duplicates_pct < 100:
+        if 0 < duplicates_pct < 1:
+            duplicates_pct = '<1'
+        elif duplicates_pct > 99 and duplicates_pct < 100:
             duplicates_pct = round(duplicates_pct, 1)
+            if duplicates_pct == 100:
+                duplicates_pct = 99.9
         else:
             duplicates_pct = round(duplicates_pct)
         duplicates = f'{duplicates} ({duplicates_pct}%)'
+        regex = re.compile(r'\s+')
+        duplicates_keep_false = column.duplicated(keep=False).sum()
+        duplicates_sub = column.apply(lambda x: regex.sub(' ', x.lower(
+        ).strip()) if isinstance(x, str) else x).duplicated(keep=False).sum()
+        duplicates_sub_minis_origin = duplicates_sub - duplicates_keep_false
+        if duplicates_sub_minis_origin == 0:
+            duplicates_sub_minis_origin = '---'
+        else:
+            duplicates_sub_minis_origin = pretty_value(
+                duplicates_sub_minis_origin)
+            duplicates_sub_minis_origin_pct = (
+                duplicates_sub - duplicates_keep_false) * 100 / duplicates_sub
+            if 0 < duplicates_sub_minis_origin_pct < 1:
+                duplicates_sub_minis_origin_pct = '<1'
+            elif (duplicates_sub_minis_origin_pct > 99 and duplicates_sub_minis_origin_pct < 100) \
+                    or duplicates_sub_minis_origin_pct < 1:
+                duplicates_sub_minis_origin_pct = round(
+                    duplicates_sub_minis_origin_pct, 1)
+            else:
+                duplicates_sub_minis_origin_pct = round(
+                    duplicates_sub_minis_origin_pct)
+            duplicates_sub_minis_origin = f'{duplicates_sub_minis_origin} ({duplicates_sub_minis_origin_pct}%)'
+
     ram = round(column.__sizeof__() / 1_048_576)
     if ram == 0:
         ram = '<1 Mb'
     column_summary = pd.DataFrame({
-        'Values': [values], 'Missing': [missing], 'Distinct': [distinct], 'Duplicates': [duplicates], 'Empty': [zeros], 'RAM (Mb)': [ram]
+        'Values': [values], 'Missing': [missing], 'Distinct': [distinct], 'Duplicated origin': [duplicates], 'Dupl (modify - origin)': [duplicates_sub_minis_origin], 'Empty': [zeros], 'RAM (Mb)': [ram]
     })
     widget_summary_obj = widgets.Output()
     with widget_summary_obj:
@@ -378,6 +620,7 @@ def make_widget_value_counts_obj(column):
     val_cnt_norm = column.value_counts(normalize=True).iloc[:7]
     column_name_pct = column_name + '_pct'
     val_cnt_norm.name = column_name_pct
+
     def make_value_counts_row(x):
         if x[column_name_pct] < 0.01:
             pct_str = '<1%'
@@ -433,7 +676,7 @@ def make_hbox(widgets_: list):
     return hbox
 
 
-def my_info(df, graphs=True, num=True, obj=True):
+def my_info(df, graphs=True, num=True, obj=True, date=True):
     '''
     Функция выводить информацию о датафрейме
     Четвертый столбцев (перед графиками) Value counts
@@ -443,7 +686,7 @@ def my_info(df, graphs=True, num=True, obj=True):
     graphs: bool, default True
     Если True, то выводятся графики. 
     '''
-    if not num and not obj:
+    if not num and not obj and not date:
         return
     vbox_layout = Layout(display='flex',
                          # flex_flow='column',
@@ -452,40 +695,64 @@ def my_info(df, graphs=True, num=True, obj=True):
                          # grid_gap = '20px',
                          # align_items = 'flex-end'
                          )
-    boxes = []
     funcs_num = [make_widget_summary, make_widget_pct,
                  make_widget_std, make_widget_value_counts]
     func_obj = [make_widget_summary_obj, make_widget_value_counts_obj]
+    func_date = [make_widget_range_date,
+                 make_widget_summary_date, make_widget_check_missing_date]
     if graphs:
         funcs_num += [make_widget_hist_plotly, make_widget_violine_plotly]
         func_obj += [make_widget_bar_obj]
+    boxes = []
+    if date:
+        date_columns = filter(
+            lambda x: pd.api.types.is_datetime64_any_dtype(df[x]), df.columns)
+        for column in tqdm(date_columns):
+            widgets_ = [func(df[column]) for func in func_date]
+            boxes.extend((widgets_))
+        layout = widgets.Layout(
+            grid_template_columns='1fr 1fr 1fr 1fr 1fr')
+        date_grid = widgets.GridBox(boxes, layout=layout)
+    boxes = []
     if num:
         num_columns = filter(
             lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns)
         for column in tqdm(num_columns):
             widgets_ = [func(df[column]) for func in funcs_num]
             boxes.extend((widgets_))
-        layout = widgets.Layout(
-            grid_template_columns='auto auto auto auto auto auto')
+        if graphs:
+            layout = widgets.Layout(
+                grid_template_columns='auto auto auto auto auto auto')
+        else:
+            layout = widgets.Layout(
+                grid_template_columns='repeat(4, 0.2fr)')
         num_grid = widgets.GridBox(boxes, layout=layout)
+    boxes = []
     if obj:
         obj_columns = filter(
-            lambda x: not pd.api.types.is_numeric_dtype(df[x]), df.columns)
+            lambda x: not pd.api.types.is_numeric_dtype(df[x]) and not pd.api.types.is_datetime64_any_dtype(df[x]), df.columns)
         for column in tqdm(obj_columns):
             widgets_ = [func(df[column]) for func in func_obj]
             boxes.extend((widgets_))
-        layout = widgets.Layout(
-            grid_template_columns='auto auto auto')
+        if graphs:
+            layout = widgets.Layout(
+                grid_template_columns='auto auto auto')
+        else:
+            layout = widgets.Layout(
+                grid_template_columns='repeat(2, 0.3fr)')
         obj_grid = widgets.GridBox(boxes, layout=layout)
 
     # widgets.Layout(grid_template_columns="200px 200px 200px 200px 200px 200px")))
     display(make_widget_all_frame(df))
+    if date:
+        display(date_grid)
     if num:
         display(num_grid)
     if obj:
         display(obj_grid)
 
-def my_info_gen(df, graphs=True, num=True, obj=True):
+
+def my_info_gen(df, graphs=True, num=True, obj=True, date=True):
     '''
     Генератор выводить информацию о датафрейме
     Четвертый столбцев (перед графиками) Value counts
@@ -495,7 +762,7 @@ def my_info_gen(df, graphs=True, num=True, obj=True):
     graphs: bool, default True
     Если True, то выводятся графики. 
     '''
-    if not num and not obj:
+    if not num and not obj and not date:
         return
     vbox_layout = Layout(display='flex',
                          # flex_flow='column',
@@ -510,25 +777,132 @@ def my_info_gen(df, graphs=True, num=True, obj=True):
     funcs_num = [make_widget_summary, make_widget_pct,
                  make_widget_std, make_widget_value_counts]
     func_obj = [make_widget_summary_obj, make_widget_value_counts_obj]
+    func_date = [make_widget_range_date,
+                 make_widget_summary_date, make_widget_check_missing_date]
     if graphs:
         funcs_num += [make_widget_hist_plotly, make_widget_violine_plotly]
         func_obj += [make_widget_bar_obj]
+    if date:
+        date_columns = filter(
+            lambda x: pd.api.types.is_datetime64_any_dtype(df[x]), df.columns)
+        layout = widgets.Layout(
+            grid_template_columns='auto auto')
+        for column in tqdm(date_columns):
+            widgets_ = [func(df[column]) for func in func_date]
+            display(widgets.GridBox(widgets_, layout=layout))
+            yield
     if num:
         num_columns = filter(
             lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns)
-        layout = widgets.Layout(
-            grid_template_columns='auto auto auto auto auto auto')
+        if graphs:
+            layout = widgets.Layout(
+                grid_template_columns='auto auto auto auto auto auto')
+        else:
+            layout = widgets.Layout(
+                grid_template_columns='repeat(4, 0.2fr)')
         for column in tqdm(num_columns):
             widgets_ = [func(df[column]) for func in funcs_num]
-            display(widgets.GridBox(boxes, layout=layout))
+            display(widgets.GridBox(widgets_, layout=layout))
             yield
     if obj:
         obj_columns = filter(
-            lambda x: not pd.api.types.is_numeric_dtype(df[x]), df.columns)
+            lambda x: not pd.api.types.is_numeric_dtype(df[x]) and not pd.api.types.is_datetime64_any_dtype(df[x]), df.columns)
+        if graphs:
+            layout = widgets.Layout(
+                grid_template_columns='auto auto auto')
+        else:
+            layout = widgets.Layout(
+                grid_template_columns='repeat(2, 0.3fr)')
         for column in tqdm(obj_columns):
             widgets_ = [func(df[column]) for func in func_obj]
-            boxes.extend((widgets_))
-        layout = widgets.Layout(
-            grid_template_columns='auto auto auto')
-        obj_grid = widgets.GridBox(boxes, layout=layout)
+            display(widgets.GridBox(widgets_, layout=layout))
+            yield
 
+
+def check_duplicated(df):
+    '''
+    Функция проверяет датафрейм на дубли.  
+    Если дубли есть, то выводит дубли.
+    '''
+    dupl = df.duplicated().sum()
+    if dupl == 0:
+        return 'no duplicates'
+    print(f'Duplicated is {dupl} rows')
+    # приводим строки к нижнему регистру, удаляем пробелы
+    regex = re.compile(r'\s+')
+    display(df.applymap(lambda x: regex.sub(' ', x.lower().strip()) if isinstance(x, str) else x)
+            .value_counts(dropna=False)
+            .to_frame()
+            .sort_values(0, ascending=False)
+            .rename(columns={0: 'Count'})
+            .head(10))
+
+
+def check_duplicated_combinations(df, n):
+    '''
+    Функция считает дубликаты между всеми возможными комбинациями между столбцами.
+    Сначала для проверки на дубли берутся пары столбцов.  
+    Затем по 3 столбца. И так все возможные комибнации.  
+    Можно выбрать до какого количества комбинаций двигаться.
+    n - максимальное возможное количество столбцов в комбинациях
+    '''
+    if n < 2:
+        return
+    regex = re.compile(r'\s+')
+    df_copy = df.applymap(lambda x: regex.sub(
+        ' ', x.lower().strip()) if isinstance(x, str) else x)
+    c2 = itertools.combinations(df.columns, 2)
+    dupl_df_c2 = pd.DataFrame([], index=df.columns, columns=df.columns)
+    print(f'Group by 2 columns')
+    for c in c2:
+        duplicates = df_copy[list(c)].duplicated().sum()
+        dupl_df_c2.loc[c[1], c[0]] = duplicates
+    display(dupl_df_c2.fillna('').style.set_caption('Duplicates').set_table_styles([{'selector': 'caption',
+                                                                                     'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]
+                                                                                     }]))
+    if n < 3:
+        return
+    c3 = itertools.combinations(df.columns, 3)
+    dupl_c3_list = []
+    print(f'Group by 3 columns')
+    for c in c3:
+        duplicates = df_copy[list(c)].duplicated().sum()
+        if duplicates:
+            dupl_c3_list.append([' | '.join(c), duplicates])
+    dupl_df_c3 = pd.DataFrame(dupl_c3_list)
+    # разобьем таблицу на 3 части, чтобы удобнее читать
+    display(pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_c3, 3)], axis=1)
+            .style.format({1: '{:.0f}'}, na_rep='').hide_index().hide_columns())
+    if n < 4:
+        return
+    for col_n in range(4, df.columns.size + 1):
+        print(f'Group by {col_n} columns')
+        cn = itertools.combinations(df.columns, col_n)
+        dupl_cn_list = []
+        for c in cn:
+            duplicates = df_copy[list(c)].duplicated().sum()
+            if duplicates:
+                dupl_cn_list.append([' | '.join(c), duplicates])
+        dupl_df_cn = pd.DataFrame(dupl_cn_list)
+        # разобьем таблицу на 3 части, чтобы удобнее читать
+        display(pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_cn, 2)], axis=1)
+                .style.format({1: '{:.0f}'}, na_rep='').hide_index().hide_columns())
+        if n < col_n+1:
+            return
+
+
+def find_columns_with_missing_values(df) -> pd.Series:
+    '''
+    Фукнция проверяет каждый столбец в таблице,  
+    если есть пропуски, то помещает строки исходного 
+    дата фрейма с этими пропусками в Series. 
+    Индекс - название колонки. 
+    Если нужно соеденить фреймы в один, то используем 
+    pd.concat(res.to_list())
+    '''
+    dfs_na = pd.Series(dtype=int)
+    for col in df.columns:
+        is_na = df[col].isna()
+        if is_na.any():
+            dfs_na[col] = df[is_na]
+    return dfs_na
