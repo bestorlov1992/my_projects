@@ -906,3 +906,70 @@ def find_columns_with_missing_values(df) -> pd.Series:
         if is_na.any():
             dfs_na[col] = df[is_na]
     return dfs_na
+
+
+def check_na_in_both_columns(df, cols: list) -> pd.DataFrame:
+    '''
+    Фукнция проверяет есть ли пропуски одновременно во всех указанных столбцах
+    и возвращает датафрейм только со строками, в которых пропуски одновременно во всех столбцах
+    '''
+    mask = df[cols].isna().all(axis=1)
+    return df[mask]
+
+def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missing_values: str, category_column: str) -> pd.DataFrame:
+    """
+    Return a DataFrame with the proportion of missing values for each category.
+
+    Parameters:
+    df (pd.DataFrame): Input DataFrame
+    column_with_missing_values (str): Column with missing values
+    category_column (str): Category column
+
+    Returns:
+    pd.DataFrame: DataFrame with the proportion of missing values for each category
+    """
+    # Create a mask to select rows with missing values in the specified column
+    mask = df[column_with_missing_values].isna()
+
+    # Group by category and count the number of rows with missing values
+    missing_value_counts = df[mask].groupby(category_column).size().reset_index(name='missing_count')
+    summ_missing_counts = missing_value_counts['missing_count'].sum()
+    # Get the total count for each category
+    total_counts = df.groupby(category_column).size().reset_index(name='total_count')
+
+    # Merge the two DataFrames to calculate the proportion of missing values
+    result_df = pd.merge(missing_value_counts, total_counts, on=category_column)
+    result_df['missing_value_in_category_pct'] = (result_df['missing_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+    result_df['missing_value_in_column_pct'] = (result_df['missing_count'] / summ_missing_counts).apply(lambda x: f'{x:.1%}')
+    # Return the result DataFrame
+    return result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct']]
+
+def get_duplicates_value_proportion_by_category(df: pd.DataFrame, column_with_dublicated_values: str, category_column: str) -> pd.DataFrame:
+    """
+    Return a DataFrame with the proportion of duplicated values for each category.
+
+    Parameters:
+    df (pd.DataFrame): Input DataFrame
+    column_with_dublicated_values (str): Column with dublicated values
+    category_column (str): Category column
+
+    Returns:
+    pd.DataFrame: DataFrame with the proportion of missing values for each category
+    """
+    # Create a mask to select rows with dublicated values in the specified column
+    mask = df[column_with_dublicated_values].duplicated()
+
+    # Group by category and count the number of rows with dublicated values
+    dublicated_value_counts = df[mask].groupby(category_column).size().reset_index(name='dublicated_count')
+    summ_dublicated_value_counts = dublicated_value_counts['dublicated_count'].sum()
+    # Get the total count for each category
+    total_counts = df.groupby(category_column).size().reset_index(name='total_count')
+
+    # Merge the two DataFrames to calculate the proportion of dublicated values
+    result_df = pd.merge(dublicated_value_counts, total_counts, on=category_column)
+    result_df['dublicated_value_in_category_pct'] = (result_df['dublicated_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+    result_df['dublicated_value_in_column_pct'] = (result_df['dublicated_count'] / summ_dublicated_value_counts).apply(lambda x: f'{x:.1%}')
+    # Return the result DataFrame
+    return result_df[[category_column, 'total_count', 'dublicated_count', 'dublicated_value_in_category_pct', 'dublicated_value_in_column_pct']]
+
+
