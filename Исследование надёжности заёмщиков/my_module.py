@@ -8,6 +8,7 @@ from IPython.display import display, display_html, display_markdown
 from tqdm.auto import tqdm
 import re
 import itertools
+from pymystem3 import Mystem
 
 
 def pretty_value(value):
@@ -1156,3 +1157,249 @@ def fill_missing_values_using_helper_column(df, categorical_column, helper_colum
     filled_df = filled_df.merge(helper_df, on=helper_column, how='left')
 
     return filled_df
+
+
+def get_outlier_quantile_proportion_by_category(df: pd.DataFrame, column_with_outliers: str, category_column: str, lower_quantile: float = 0.05, upper_quantile: float = 0.95) -> None:
+    """
+    Return a DataFrame with the proportion of outliers for each category.
+
+    Parameters:
+    df (pd.DataFrame): Input DataFrame
+    column_with_outliers (str): Column with outliers
+    category_column (str): Category column
+    lower_quantile (float): Lower quantile (e.g., 0.25 for 25th percentile)
+    upper_quantile (float): Upper quantile (e.g., 0.75 for 75th percentile)
+
+    Returns:
+    None
+    """
+    # Calculate the lower and upper bounds for outliers
+    lower_bound = df[column_with_outliers].quantile(lower_quantile)
+    upper_bound = df[column_with_outliers].quantile(upper_quantile)
+
+    # Create a mask to select rows with outliers in the specified column
+    mask = (df[column_with_outliers] < lower_bound) | (
+        df[column_with_outliers] > upper_bound)
+
+    # Group by category and count the number of rows with outliers
+    outlier_counts = df[mask].groupby(
+        category_column).size().reset_index(name='outlier_count')
+    summ_outlier_counts = outlier_counts['outlier_count'].sum()
+    # Get the total count for each category
+    total_counts = df.groupby(
+        category_column).size().reset_index(name='total_count')
+
+    # Merge the two DataFrames to calculate the proportion of outliers
+    result_df = pd.merge(outlier_counts,
+                         total_counts, on=category_column)
+    result_df['outlier_in_category_pct'] = (
+        result_df['outlier_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+    result_df['outlier_in_column_pct'] = (
+        result_df['outlier_count'] / summ_outlier_counts).apply(lambda x: f'{x:.1%}')
+    display(result_df[[category_column, 'total_count', 'outlier_count', 'outlier_in_category_pct', 'outlier_in_column_pct']].style
+            .set_caption(f'Outliers in "{column_with_outliers}" by category "{category_column}"')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_index())
+
+
+def get_outlier_proportion_by_category_modified_z_score(df: pd.DataFrame, column_with_outliers: str, category_column: str, threshold: float = 3.5) -> None:
+    """
+    Return a DataFrame with the proportion of outliers for each category.
+
+    Parameters:
+    df (pd.DataFrame): Input DataFrame
+    column_with_outliers (str): Column with outliers
+    category_column (str): Category column
+    threshold (float): Threshold for modified z-score
+
+    Returns:
+    None
+    """
+    # Calculate the median and median absolute deviation (MAD) for the specified column
+    median = df[column_with_outliers].median()
+    mad = np.median(np.abs(df[column_with_outliers] - median))
+
+    # Create a mask to select rows with outliers in the specified column
+    mask = np.abs(
+        0.6745 * (df[column_with_outliers] - median) / mad) > threshold
+
+    # Group by category and count the number of rows with outliers
+    outlier_counts = df[mask].groupby(
+        category_column).size().reset_index(name='outlier_count')
+    summ_outlier_counts = outlier_counts['outlier_count'].sum()
+
+    # Get the total count for each category
+    total_counts = df.groupby(
+        category_column).size().reset_index(name='total_count')
+
+    # Merge the two DataFrames to calculate the proportion of outliers
+    result_df = pd.merge(outlier_counts,
+                         total_counts, on=category_column)
+    result_df['outlier_in_category_pct'] = (
+        result_df['outlier_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+    result_df['outlier_in_column_pct'] = (
+        result_df['outlier_count'] / summ_outlier_counts).apply(lambda x: f'{x:.1%}')
+
+    display(result_df[[category_column, 'total_count', 'outlier_count', 'outlier_in_category_pct', 'outlier_in_column_pct']].style
+            .set_caption(f'Outliers in "{column_with_outliers}" by category "{category_column}"')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_index())
+
+
+def merge_duplicates(df, duplicate_column, merge_functions):
+    """
+    Объединяет дубли в датафрейме по указанной колонке с помощью функций из словаря.
+
+    Parameters:
+    df (pd.DataFrame): датафрейм для объединения дублей
+    duplicate_column (str): название колонки с дублями
+    merge_functions (dict): словарь с функциями для объединения, где ключ - название колонки, а значение - функция для объединения
+
+    Returns:
+    pd.DataFrame: датафрейм с объединенными дублями
+    """
+    return df.groupby(duplicate_column, as_index=False).agg(merge_functions)
+
+
+def create_category_column(column, method='custom_intervals', labels=None, n_intervals=None, bins=None, right=True):
+    """
+    Create a new category column based on the chosen method.
+
+    Parameters:
+    - column (pandas Series): input column
+    - method (str, optional): either 'custom_intervals' or 'quantiles' (default is 'custom_intervals')
+    - labels (list, optional): list of labels for future categories (default is None)
+    - n_intervals (int, optional): number of intervals for 'custom_intervals' or 'quantiles' method (default is len(labels) + 1)
+    - bins (list, optional): list of bins for pd.cut function (default is None). The length of `bins` should be `len(labels) + 1`.
+    - right (bool, optional): Whether to include the rightmost edge or not. Default is True.
+
+    Returns:
+    - pandas Series: new category column
+
+    Example:
+    ```
+    # Create a sample dataframe
+    df = pd.DataFrame({'values': np.random.rand(100)})
+
+    # Create a category column using custom intervals
+    category_column = create_category_column(df['values'], method='custom_intervals', labels=['low', 'medium', 'high'], n_intervals=3)
+    df['category'] = category_column
+
+    # Create a category column using quantiles
+    category_column = create_category_column(df['values'], method='quantiles', labels=['Q1', 'Q2', 'Q3', 'Q4'], n_intervals=4)
+    df['category_quantile'] = category_column
+    ```
+    """
+    if method == 'custom_intervals':
+        if bins is None:
+            if n_intervals is None:
+                # default number of intervals
+                n_intervals = len(labels) + 1 if labels is not None else 10
+            # Calculate равные интервалы
+            intervals = np.linspace(column.min(), column.max(), n_intervals)
+            if labels is None:
+                category_column = pd.cut(column, bins=intervals, right=right)
+            else:
+                category_column = pd.cut(
+                    column, bins=intervals, labels=labels, right=right)
+        else:
+            if labels is None:
+                category_column = pd.cut(column, bins=bins, right=right)
+            else:
+                category_column = pd.cut(
+                    column, bins=bins, labels=labels, right=right)
+    elif method == 'quantiles':
+        if n_intervals is None:
+            # default number of intervals
+            n_intervals = len(labels) if labels is not None else 10
+        if labels is None:
+            category_column = pd.qcut(
+                column.rank(method='first'), q=n_intervals)
+        else:
+            category_column = pd.qcut(column.rank(
+                method='first'), q=n_intervals, labels=labels)
+    else:
+        raise ValueError(
+            "Invalid method. Choose either 'custom_intervals' or 'quantiles'.")
+
+    return category_column
+
+
+def lemmatize_column(column):
+    """
+    Лемматизация столбца с текстовыми сообщениями.
+
+    Parameters:
+    column (pd.Series): Колонка для лемматизации.
+
+    Returns:
+    pd.Series: Лемматизированная колонка в виде строки.
+    """
+    m = Mystem()  # Создаем экземпляр Mystem внутри функции
+
+    def lemmatize_text(text):
+        """Приведение текста к леммам с помощью библиотеки Mystem."""
+        if not text:
+            return ''
+
+        try:
+            lemmas = m.lemmatize(text)
+            return ' '.join(lemmas)
+        except Exception as e:
+            print(f"Ошибка при лемматизации текста: {e}")
+            return ''
+
+    return column.map(lemmatize_text)
+
+
+def categorize_column_by_lemmatize(column, categorization_dict):
+    """
+    Категоризация столбца с помощью лемматизации.
+
+    Parameters:
+    column (pd.Series): Столбец для категоризации.
+    categorization_dict (dict): Словарь для категоризации, где ключи - категории, а значения - списки лемм.
+
+    Returns:
+    pd.Series: Категоризированный столбец.
+
+    Пример использования:
+    ```
+    # Создайте образец dataframe
+    data = {'text': ['This is a sample text', 'Another example text', 'This is a test']}
+    df = pd.DataFrame(data)
+
+    # Определите словарь категоризации
+    categorization_dict = {
+        'Sample': ['sample', 'example'],
+        'Test': ['test']
+    }
+
+    # Вызовите функцию
+    categorized_column = categorize_column_by_lemmatize(df['text'], categorization_dict)
+
+    print(categorized_column)
+    ```
+    """
+    if column.empty:
+        return pd.Series([])
+
+    m = Mystem()
+
+    def lemmatize_text(text):
+        try:
+            return m.lemmatize(text)
+        except Exception as e:
+            print(f"Ошибка при лемматизации текста: {e}")
+            return []
+
+    def categorize_text(lemmas):
+        for category, category_lemmas in categorization_dict.items():
+            if set(lemmas) & set(category_lemmas):
+                return category
+        return 'Unknown'
+
+    lemmatized_column = column.map(lemmatize_text)
+    return lemmatized_column.map(categorize_text)
