@@ -1403,6 +1403,7 @@ def categorize_column_by_lemmatize(column, categorization_dict):
 
     lemmatized_column = column.map(lemmatize_text)
     return lemmatized_column.map(categorize_text)
+<<<<<<< HEAD
 
 
 def target_encoding_linear(df, category_col, value_col, func='mean', alpha=0.1):
@@ -1488,3 +1489,5 @@ def target_encoding_bayes(df, category_col, value_col, func='mean', reg_group_si
     encoded_col = df[category_col].map(encoding_reg.to_dict())
 
     return encoding_reg
+=======
+>>>>>>> 093ee6f2a92a1aa32b9f9e782bd5c9f9b6b1a219
