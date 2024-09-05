@@ -916,6 +916,7 @@ def check_na_in_both_columns(df, cols: list) -> pd.DataFrame:
     mask = df[cols].isna().all(axis=1)
     return df[mask]
 
+
 def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missing_values: str, category_column: str) -> pd.DataFrame:
     """
     Return a DataFrame with the proportion of missing values for each category.
@@ -932,17 +933,23 @@ def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missi
     mask = df[column_with_missing_values].isna()
 
     # Group by category and count the number of rows with missing values
-    missing_value_counts = df[mask].groupby(category_column).size().reset_index(name='missing_count')
+    missing_value_counts = df[mask].groupby(
+        category_column).size().reset_index(name='missing_count')
     summ_missing_counts = missing_value_counts['missing_count'].sum()
     # Get the total count for each category
-    total_counts = df.groupby(category_column).size().reset_index(name='total_count')
+    total_counts = df.groupby(
+        category_column).size().reset_index(name='total_count')
 
     # Merge the two DataFrames to calculate the proportion of missing values
-    result_df = pd.merge(missing_value_counts, total_counts, on=category_column)
-    result_df['missing_value_in_category_pct'] = (result_df['missing_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
-    result_df['missing_value_in_column_pct'] = (result_df['missing_count'] / summ_missing_counts).apply(lambda x: f'{x:.1%}')
+    result_df = pd.merge(missing_value_counts,
+                         total_counts, on=category_column)
+    result_df['missing_value_in_category_pct'] = (
+        result_df['missing_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+    result_df['missing_value_in_column_pct'] = (
+        result_df['missing_count'] / summ_missing_counts).apply(lambda x: f'{x:.1%}')
     # Return the result DataFrame
     return result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct']]
+
 
 def get_duplicates_value_proportion_by_category(df: pd.DataFrame, column_with_dublicated_values: str, category_column: str) -> pd.DataFrame:
     """
@@ -960,16 +967,192 @@ def get_duplicates_value_proportion_by_category(df: pd.DataFrame, column_with_du
     mask = df[column_with_dublicated_values].duplicated()
 
     # Group by category and count the number of rows with dublicated values
-    dublicated_value_counts = df[mask].groupby(category_column).size().reset_index(name='dublicated_count')
-    summ_dublicated_value_counts = dublicated_value_counts['dublicated_count'].sum()
+    dublicated_value_counts = df[mask].groupby(
+        category_column).size().reset_index(name='dublicated_count')
+    summ_dublicated_value_counts = dublicated_value_counts['dublicated_count'].sum(
+    )
     # Get the total count for each category
-    total_counts = df.groupby(category_column).size().reset_index(name='total_count')
+    total_counts = df.groupby(
+        category_column).size().reset_index(name='total_count')
 
     # Merge the two DataFrames to calculate the proportion of dublicated values
-    result_df = pd.merge(dublicated_value_counts, total_counts, on=category_column)
-    result_df['dublicated_value_in_category_pct'] = (result_df['dublicated_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
-    result_df['dublicated_value_in_column_pct'] = (result_df['dublicated_count'] / summ_dublicated_value_counts).apply(lambda x: f'{x:.1%}')
+    result_df = pd.merge(dublicated_value_counts,
+                         total_counts, on=category_column)
+    result_df['dublicated_value_in_category_pct'] = (
+        result_df['dublicated_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+    result_df['dublicated_value_in_column_pct'] = (
+        result_df['dublicated_count'] / summ_dublicated_value_counts).apply(lambda x: f'{x:.1%}')
     # Return the result DataFrame
     return result_df[[category_column, 'total_count', 'dublicated_count', 'dublicated_value_in_category_pct', 'dublicated_value_in_column_pct']]
 
 
+def check_or_fill_missing_values(df, target_column, identifier_columns, check=True):
+    """
+    Fill missing values in the target column by finding matching rows without missing values
+    in the identifier columns.
+
+    Parameters:
+    df (pd.DataFrame): The input DataFrame.
+    target_column (str): The column with missing values to be filled.
+    identifier_columns (list of str): The columns that uniquely identify the rows.
+    check: Is check or fill, default True
+
+    Returns:
+    pd.DataFrame: The input DataFrame with missing values filled in the target column.
+    """
+    # Identify rows with missing values in the target column
+    missing_rows = df[df[target_column].isna()]
+
+    # Extract unique combinations of identifying columns from the rows with missing values
+    unique_identifiers = missing_rows[identifier_columns].drop_duplicates()
+
+    # Find matching rows without missing values in the target column
+    df_unique_identifiers_for_compare = df[identifier_columns].set_index(
+        identifier_columns).index
+    unique_identifiers_for_comapre = unique_identifiers.set_index(
+        identifier_columns).index
+    matching_rows = df[df_unique_identifiers_for_compare.isin(unique_identifiers_for_comapre) &
+                       (~df['total_income'].isna())]
+    # Check if there are matching rows without missing values
+    if not matching_rows.empty:
+        if check:
+            print(
+                f'Found {matching_rows.shape[0]} matching rows without missing values')
+            return
+        # Replace missing values with values from matching rows
+        df.loc[missing_rows.index,
+               target_column] = matching_rows[target_column].values
+        print(
+            f'Fiiled {matching_rows.shape[0]} matching rows without missing values')
+    else:
+        print("No matching rows without missing values found.")
+
+
+def get_non_matching_rows(df, col1, col2):
+    """
+    Возвращает строки DataFrame, для которых значения в col1 имеют разные значения в col2.
+
+    Parameters:
+    df (pd.DataFrame): DataFrame с данными
+    col1 (str): Название колонки с значениями, для которых нужно проверить уникальность
+    col2 (str): Название колонки с значениями, которые нужно проверить на совпадение
+
+    Returns:
+    pd.DataFrame: Строки DataFrame, для которых значения в col1 имеют разные значения в col2
+    """
+    non_unique_values = df.groupby(col1)[col2].nunique()[lambda x: x > 1].index
+    non_matching_rows = df[df[col1].isin(non_unique_values)]
+    if non_matching_rows.empty:
+        print('Нет строк для которых значения в col1 имеют разные значения в col2')
+    else:
+        return non_matching_rows
+
+
+def fill_na_with_function_by_categories(df, category_columns, value_column, func='median'):
+    """
+    Fills missing values in the value_column with the result of the func function, 
+    grouping by the category_columns.
+
+    Parameters:
+    df (pandas.DataFrame): DataFrame to fill missing values
+    category_columns (list): list of column names to group by
+    value_column (str): name of the column to fill missing values
+    func (callable or str): function to use for filling missing values 
+    (can be a string, e.g. "mean", or a callable function that returns a single number)
+
+    Returns:
+    pandas.DataFrame: modified DataFrame with filled missing values
+    """
+    available_funcs = {'median', 'mean', 'max', 'min'}
+
+    if isinstance(func, str):
+        if func not in available_funcs:
+            raise ValueError(f"Unknown function: {func}")
+        # If func is a string, use the corresponding pandas method
+        df[value_column] = df.groupby(category_columns)[value_column].transform(
+            lambda x: x.fillna(x.apply(func)))
+    else:
+        # If func is a callable, apply it to each group of values
+        df[value_column] = df.groupby(category_columns)[
+            value_column].transform(lambda x: x.fillna(func(x)))
+    return df
+
+
+def detect_outliers_Zscore(df: pd.DataFrame, z_level: float = 3.5) -> pd.Series:
+    """
+    Detect outliers in a DataFrame using the Modified Z-score method.
+
+    Parameters:
+    df (pd.DataFrame): DataFrame to detect outliers in.
+    z_level (float, optional): Modified Z-score threshold for outlier detection. Defaults to 3.5.
+
+    Returns:
+    pd.Series: Series with column names as indices and outlier DataFrames as values.
+    """
+    outliers = pd.Series(dtype=object)
+    cnt_outliers = pd.Series(dtype=int)
+    for col in filter(lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns):
+        median = df[col].median()
+        mad = np.median(np.abs(df[col] - median))
+        modified_z_scores = 0.6745 * (df[col] - median) / mad
+        outliers[col] = df[np.abs(modified_z_scores) > z_level]
+        cnt_outliers[col] = outliers[col].shape[0]
+    display(cnt_outliers.to_frame().T.style
+            .set_caption('Outliers')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_index())
+    return outliers
+
+
+def detect_outliers_quantile(df: pd.DataFrame, lower_quantile: float = 0.05, upper_quantile: float = 0.95) -> pd.Series:
+    """
+    Detect outliers in a DataFrame using quantile-based method.
+
+    Parameters:
+    df (pd.DataFrame): DataFrame to detect outliers in.
+    lower_quantile (float, optional): Lower quantile threshold for outlier detection. Defaults to 0.25.
+    upper_quantile (float, optional): Upper quantile threshold for outlier detection. Defaults to 0.75.
+
+    Returns:
+    pd.Series: Series with column names as indices and outlier DataFrames as values.
+    """
+    outliers = pd.Series(dtype=object)
+    cnt_outliers = pd.Series(dtype=int)
+    for col in filter(lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns):
+        lower_bound = df[col].quantile(lower_quantile)
+        upper_bound = df[col].quantile(upper_quantile)
+        outliers[col] = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
+        cnt_outliers[col] = outliers[col].shape[0]
+    display(cnt_outliers.to_frame().T.style
+            .set_caption('Outliers')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_index())
+    return outliers
+
+
+def fill_missing_values_using_helper_column(df, categorical_column, helper_column):
+    """
+    Заполнить пропуски в категориальной переменной на основе значений другой переменной.
+
+    Parameters:
+    df (pd.DataFrame): Исходная таблица.
+    categorical_column (str): Имя категориальной переменной с пропусками.
+    helper_column (str): Имя переменной без пропусков, используемой для заполнения пропусков.
+
+    Returns:
+    pd.DataFrame: Таблица с заполненными пропусками.
+    """
+    # Создать таблицу справочника с уникальными значениями helper_column
+    helper_df = df[[helper_column, categorical_column]
+                   ].drop_duplicates(helper_column)
+
+    # Удалить строки с пропусками в categorical_column
+    helper_df = helper_df.dropna(subset=[categorical_column])
+
+    # Создать новую таблицу с заполненными пропусками
+    filled_df = df.drop(categorical_column, axis=1)
+    filled_df = filled_df.merge(helper_df, on=helper_column, how='left')
+
+    return filled_df
