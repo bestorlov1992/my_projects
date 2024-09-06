@@ -9,6 +9,9 @@ from tqdm.auto import tqdm
 import re
 import itertools
 from pymystem3 import Mystem
+import plotly.graph_objects as go
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
 
 
 def pretty_value(value):
@@ -1403,7 +1406,7 @@ def categorize_column_by_lemmatize(column, categorization_dict):
 
     lemmatized_column = column.map(lemmatize_text)
     return lemmatized_column.map(categorize_text)
-<<<<<<< HEAD
+
 
 
 def target_encoding_linear(df, category_col, value_col, func='mean', alpha=0.1):
@@ -1488,6 +1491,198 @@ def target_encoding_bayes(df, category_col, value_col, func='mean', reg_group_si
     # Заменяем категории на средние значения
     encoded_col = df[category_col].map(encoding_reg.to_dict())
 
-    return encoding_reg
-=======
->>>>>>> 093ee6f2a92a1aa32b9f9e782bd5c9f9b6b1a219
+    return encoded_col
+
+def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, yaxis_label=None, width=None, height=None, decimal_places=2, font_size=14):
+    """
+    Creates a heatmap from a Pandas DataFrame using Plotly.
+
+    Parameters:
+    - `df`: The Pandas DataFrame to create the heatmap from.
+    - `title`: The title of the heatmap (default is an empty string).
+    - `xtick_text`: The custom tick labels for the x-axis (default is None).
+    - `ytick_text`: The custom tick labels for the y-axis (default is None).
+    - `xaxis_label`: The label for the x-axis (default is None).
+    - `yaxis_label`: The label for the y-axis (default is None).
+    - `width`: The width of the heatmap (default is None).
+    - `height`: The height of the heatmap (default is None).
+    - `decimal_places`: The number of decimal places to display in the annotations (default is 2).
+    - `font_size`: The font size for the text in the annotations (default is 14).
+
+    Returns:
+    - A Plotly figure object representing the heatmap.
+
+    Notes:
+    - If `xtick_text` or `ytick_text` is provided, it must have the same length as the number of columns or rows in the DataFrame, respectively.
+    - The heatmap is created with a custom colorscale and hover labels.
+    - The function returns a Plotly figure object, which can be displayed using `fig.show()`.
+    """
+    # Create figure
+    fig = go.Figure(data=go.Heatmap(
+        z=df.values,
+        x=df.columns,
+        y=df.index,
+        xgap=3, 
+        ygap=3,
+        colorscale=[[0, 'rgba(204, 153, 255, 0.2)'], [1, 'rgba(128, 0, 170, 1)']],
+        hoverongaps=False,
+        hoverinfo="x+y+z",
+        hoverlabel=dict(
+            bgcolor="white",
+            font=dict(color="black", size=font_size)  # Increase font size to font_size
+        )
+    ))
+
+    # Create annotations
+    annotations = [
+        dict(
+            text=f"{df.values[row, col]:.{decimal_places}f}",
+            x=col,
+            y=row,
+            showarrow=False,
+            font=dict(
+                color="black" if df.values[row, col] < (df.values.max() - df.values.min()) / 2 else "white",
+                size=font_size
+            )
+        )
+        for row, col in np.ndindex(df.values.shape)
+    ]
+
+    # Update layout
+    fig.update_layout(
+        title=title,
+        annotations=annotations,
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=False)
+    )
+
+    # Update axis labels if custom labels are provided
+    if xtick_text is not None:
+        if len(xtick_text) != len(df.columns):
+            raise ValueError("xtick_text must have the same length as the number of columns in the DataFrame")
+        fig.update_layout(xaxis=dict(tickvals=range(len(xtick_text)), ticktext=xtick_text))
+
+    if ytick_text is not None:
+        if len(ytick_text) != len(df.index):
+            raise ValueError("ytick_text must have the same length as the number of rows in the DataFrame")
+        fig.update_layout(yaxis=dict(tickvals=range(len(ytick_text)), ticktext=ytick_text))
+
+    # Update axis labels if custom labels are provided
+    if xaxis_label is not None:
+        fig.update_layout(xaxis=dict(title=xaxis_label))
+
+    if yaxis_label is not None:
+        fig.update_layout(yaxis=dict(title=yaxis_label))
+
+    # Update figure size if custom size is provided
+    if width is not None:
+        fig.update_layout(width=width)
+    if height is not None:
+        fig.update_layout(height=height)
+
+    return fig
+
+def plot_feature_importances_classifier(df: pd.DataFrame, target: str):
+    """
+    Plot the feature importances of a random forest classifier using Plotly Express.
+
+    Parameters:
+    df (pandas.DataFrame): The input DataFrame containing the features and target variable.
+    target (str): The name of the target variable column in the DataFrame.
+
+    Returns:
+    fig (plotly.graph_objs.Figure): The feature importance plot.
+
+    Notes:
+    This function trains a random forest classifier on the input DataFrame, extracts the feature importances,
+    and plots them using Plotly Express. 
+    """
+    
+    
+    # Select numeric columns and the target variable
+    num_columns = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    df_tmp = df[num_columns + [target]].dropna()
+    df_features = df_tmp[num_columns]
+    target = df_tmp[target]
+    # Get the feature names
+    features = df_features.columns    
+    # Normalize the data using Standard Scaler
+    scaler = StandardScaler()
+    df_scaled = scaler.fit_transform(df_features)
+
+    
+    # Train a random forest classifier
+    clf = RandomForestClassifier(n_estimators=100, random_state=0)
+    clf.fit(df_scaled, target)
+    
+    # Get the feature importances
+    importances = clf.feature_importances_
+    feature_importances = pd.DataFrame({'Feature': features, 'Importance': importances})
+    
+    # Sort the feature importances in descending order
+    feature_importances = feature_importances.sort_values('Importance', ascending=False)
+    
+    # Create the bar chart
+    fig = px.bar(feature_importances, x='Importance', y='Feature', title=f'Feature Importances for {target}')
+    fig.update_layout(
+        yaxis=dict(categoryorder='total ascending'),
+        width=700,  # Set the width of the graph
+        height=500,  # Set the height of the graph
+        hoverlabel=dict(bgcolor='white'),
+        template='simple_white'  # Set the template to simple_white
+    )
+    fig.update_traces(marker_color='rgba(128, 60, 170, 0.9)') # Set the bar color to mediumpurple
+    
+    return fig
+
+def plot_feature_importances_regression(df: pd.DataFrame, target: str):
+    """
+    Plot the feature importances of a random forest regressor using Plotly Express.
+
+    Parameters:
+    df (pandas.DataFrame): The input DataFrame containing the features and target variable.
+    target (str): The name of the target variable column in the DataFrame.
+
+    Returns:
+    fig (plotly.graph_objs.Figure): The feature importance plot.
+
+    Notes:
+    This function trains a random forest regressor on the input DataFrame, extracts the feature importances,
+    and plots them using Plotly Express.
+    """
+    # Select numeric columns and the target variable
+    num_columns = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    df_tmp = df[num_columns].dropna()
+    df_features = df_tmp[num_columns].drop(columns=target)
+    target_series = df_tmp[target]
+    # Get the feature names
+    feature_names = df_features.columns
+    
+    # Normalize the data using Standard Scaler
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(df_features)
+    
+    # Train a random forest regressor
+    clf = RandomForestRegressor(n_estimators=100, random_state=0)
+    clf.fit(scaled_data, target_series)
+    
+    # Get the feature importances
+    importances = clf.feature_importances_
+    feature_importances = pd.DataFrame({'Feature': feature_names, 'Importance': importances})
+    
+    # Sort the feature importances in descending order
+    feature_importances = feature_importances.sort_values('Importance', ascending=False)
+    
+    # Create the bar chart
+    fig = px.bar(feature_importances, x='Importance', y='Feature', title=f'Feature Importances for {target}')
+    fig.update_layout(
+        yaxis=dict(categoryorder='total ascending'),
+        width=700,  # Set the width of the graph
+        height=500,  # Set the height of the graph
+        hoverlabel=dict(bgcolor='white'),
+        template='simple_white'  # Set the template to simple_white
+    )
+    fig.update_traces(marker_color='rgba(128, 60, 170, 0.9)')  # Set the bar color to mediumpurple
+    
+    return fig
+
