@@ -12,6 +12,8 @@ from pymystem3 import Mystem
 import plotly.graph_objects as go
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
+import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
 def pretty_value(value):
@@ -1686,3 +1688,45 @@ def plot_feature_importances_regression(df: pd.DataFrame, target: str):
     
     return fig
 
+def linear_regression_with_vif(df: pd.DataFrame, target_column: str) -> None:
+    """
+    Perform linear regression with variance inflation factor (VIF) analysis.
+
+    Parameters:
+    df (pd.DataFrame): Input DataFrame containing the data.
+    target_column (str): Name of the target column.
+
+    Returns:
+    None
+
+    Description:
+    This function performs linear regression on the input DataFrame with the specified target column.
+    It first selects only the numeric columns, drops any rows with missing values, and then splits the data into features (X) and target (y).
+    A constant term is added to the independent variables (X) using `sm.add_constant(X)`.
+    The function then fits an ordinary least squares (OLS) model with heteroscedasticity-consistent standard errors (HC1).
+    The variance inflation factor (VIF) is calculated for each feature, and the results are displayed along with the model summary.
+    """
+    # Select numeric columns and drop rows with missing values
+    num_columns = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    df_tmp = df[num_columns].dropna()
+    if target_column not in df_tmp.columns:
+        raise ValueError(f"Target column '{target_column}' not found in the DataFrame.")
+    # Split data into features (X) and target (y)
+    X = df_tmp.drop(columns=target_column)
+    y = df_tmp[target_column]
+
+    # Add a constant term to the independent variables
+    X = sm.add_constant(X)
+
+    # Fit OLS model with HC1 standard errors
+    model = sm.OLS(y, X).fit(cov_type='HC1')
+
+    # Calculate VIF for each feature
+    vif = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+
+    # Create a DataFrame with coefficients and VIF
+    res = pd.DataFrame({'Coef': model.params, 'VIF': vif})
+
+    # Display results
+    display(res.iloc[1:])  # exclude the constant term
+    display(model.summary())
