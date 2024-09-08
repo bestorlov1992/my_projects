@@ -14,6 +14,60 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+import plotly.io as pio
+import plotly.graph_objects as go
+
+colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
+                     '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4']
+colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2']
+# default setting for Plotly
+# for line plot
+pio.templates["custom_theme_for_line"] = go.layout.Template(
+    layout=go.Layout(
+        colorway=colorway_for_line
+    )
+)
+# pio.templates.default = 'simple_white+custom_theme_for_line'
+# for bar plot
+pio.templates["custom_theme_for_bar"] = go.layout.Template(
+    layout=go.Layout(
+        colorway=colorway_for_bar
+    )
+)
+pio.templates.default = 'simple_white+custom_theme_for_bar'
+
+# default setting for Plotly express
+px.defaults.template = "simple_white"
+px.defaults.color_continuous_scale = color_continuous_scale = [
+    [0, 'rgba(0.018, 0.79, 0.703, 1.0)'],
+    [0.5, 'rgba(64, 120, 200, 0.9)'],
+    [1, 'rgba(128, 60, 170, 0.9)']
+]
+# px.defaults.color_discrete_sequence = colorway_for_line
+px.defaults.color_discrete_sequence = colorway_for_bar
+# px.defaults.color_discrete_sequence =  px.colors.qualitative.Bold
+# px.defaults.width = 500
+# px.defaults.height = 300
+
+
+def plotly_default_settings(fig):
+    fig.update_layout(
+        title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)"),
+        title={'text': f'<b>{fig.layout.title.text}</b>'},
+        # Для подписей и меток
+        font=dict(size=14, family="Lora", color="rgba(0, 0, 0, 1)"),
+        xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"),
+        yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"),
+        xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"),
+        yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"),
+        xaxis_linecolor="rgba(0, 0, 0, 0.5)",
+        # xaxis_linewidth=2,
+        yaxis_linecolor="rgba(0, 0, 0, 0.5)",
+        # yaxis_linewidth=2
+        margin=dict(l=50, r=50, b=50, t=70),
+        hoverlabel=dict(bgcolor="white")
+    )
 
 
 def pretty_value(value):
@@ -1410,7 +1464,6 @@ def categorize_column_by_lemmatize(column, categorization_dict):
     return lemmatized_column.map(categorize_text)
 
 
-
 def target_encoding_linear(df, category_col, value_col, func='mean', alpha=0.1):
     """
     Функция для target encoding.
@@ -1495,6 +1548,7 @@ def target_encoding_bayes(df, category_col, value_col, func='mean', reg_group_si
 
     return encoded_col
 
+
 def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, yaxis_label=None, width=None, height=None, decimal_places=2, font_size=14):
     """
     Creates a heatmap from a Pandas DataFrame using Plotly.
@@ -1524,14 +1578,15 @@ def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, ya
         z=df.values,
         x=df.columns,
         y=df.index,
-        xgap=3, 
+        xgap=3,
         ygap=3,
-        colorscale=[[0, 'rgba(204, 153, 255, 0.2)'], [1, 'rgba(128, 0, 170, 1)']],
+        colorscale=[[0, 'rgba(204, 153, 255, 0.1)'], [1, 'rgb(127, 60, 141)']],
         hoverongaps=False,
         hoverinfo="x+y+z",
         hoverlabel=dict(
             bgcolor="white",
-            font=dict(color="black", size=font_size)  # Increase font size to font_size
+            # Increase font size to font_size
+            font=dict(color="black", size=font_size)
         )
     ))
 
@@ -1543,7 +1598,8 @@ def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, ya
             y=row,
             showarrow=False,
             font=dict(
-                color="black" if df.values[row, col] < (df.values.max() - df.values.min()) / 2 else "white",
+                color="black" if df.values[row, col] < (
+                    df.values.max() - df.values.min()) / 2 else "white",
                 size=font_size
             )
         )
@@ -1561,13 +1617,17 @@ def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, ya
     # Update axis labels if custom labels are provided
     if xtick_text is not None:
         if len(xtick_text) != len(df.columns):
-            raise ValueError("xtick_text must have the same length as the number of columns in the DataFrame")
-        fig.update_layout(xaxis=dict(tickvals=range(len(xtick_text)), ticktext=xtick_text))
+            raise ValueError(
+                "xtick_text must have the same length as the number of columns in the DataFrame")
+        fig.update_layout(xaxis=dict(tickvals=range(
+            len(xtick_text)), ticktext=xtick_text))
 
     if ytick_text is not None:
         if len(ytick_text) != len(df.index):
-            raise ValueError("ytick_text must have the same length as the number of rows in the DataFrame")
-        fig.update_layout(yaxis=dict(tickvals=range(len(ytick_text)), ticktext=ytick_text))
+            raise ValueError(
+                "ytick_text must have the same length as the number of rows in the DataFrame")
+        fig.update_layout(yaxis=dict(tickvals=range(
+            len(ytick_text)), ticktext=ytick_text))
 
     # Update axis labels if custom labels are provided
     if xaxis_label is not None:
@@ -1584,6 +1644,7 @@ def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, ya
 
     return fig
 
+
 def plot_feature_importances_classifier(df: pd.DataFrame, target: str):
     """
     Plot the feature importances of a random forest classifier using Plotly Express.
@@ -1599,33 +1660,35 @@ def plot_feature_importances_classifier(df: pd.DataFrame, target: str):
     This function trains a random forest classifier on the input DataFrame, extracts the feature importances,
     and plots them using Plotly Express. 
     """
-    
-    
+
     # Select numeric columns and the target variable
-    num_columns = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    num_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
     df_tmp = df[num_columns + [target]].dropna()
     df_features = df_tmp[num_columns]
     target = df_tmp[target]
     # Get the feature names
-    features = df_features.columns    
+    features = df_features.columns
     # Normalize the data using Standard Scaler
     scaler = StandardScaler()
     df_scaled = scaler.fit_transform(df_features)
 
-    
     # Train a random forest classifier
     clf = RandomForestClassifier(n_estimators=100, random_state=0)
     clf.fit(df_scaled, target)
-    
+
     # Get the feature importances
     importances = clf.feature_importances_
-    feature_importances = pd.DataFrame({'Feature': features, 'Importance': importances})
-    
+    feature_importances = pd.DataFrame(
+        {'Feature': features, 'Importance': importances})
+
     # Sort the feature importances in descending order
-    feature_importances = feature_importances.sort_values('Importance', ascending=False)
-    
+    feature_importances = feature_importances.sort_values(
+        'Importance', ascending=False)
+
     # Create the bar chart
-    fig = px.bar(feature_importances, x='Importance', y='Feature', title=f'Feature Importances for {target}')
+    fig = px.bar(feature_importances, x='Importance', y='Feature',
+                 title=f'Feature Importances for {target}')
     fig.update_layout(
         yaxis=dict(categoryorder='total ascending'),
         width=700,  # Set the width of the graph
@@ -1633,9 +1696,11 @@ def plot_feature_importances_classifier(df: pd.DataFrame, target: str):
         hoverlabel=dict(bgcolor='white'),
         template='simple_white'  # Set the template to simple_white
     )
-    fig.update_traces(marker_color='rgba(128, 60, 170, 0.9)') # Set the bar color to mediumpurple
-    
+    # Set the bar color to mediumpurple
+    fig.update_traces(marker_color='rgba(128, 60, 170, 0.9)')
+
     return fig
+
 
 def plot_feature_importances_regression(df: pd.DataFrame, target: str):
     """
@@ -1653,30 +1718,34 @@ def plot_feature_importances_regression(df: pd.DataFrame, target: str):
     and plots them using Plotly Express.
     """
     # Select numeric columns and the target variable
-    num_columns = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    num_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
     df_tmp = df[num_columns].dropna()
     df_features = df_tmp[num_columns].drop(columns=target)
     target_series = df_tmp[target]
     # Get the feature names
     feature_names = df_features.columns
-    
+
     # Normalize the data using Standard Scaler
     scaler = StandardScaler()
     scaled_data = scaler.fit_transform(df_features)
-    
+
     # Train a random forest regressor
     clf = RandomForestRegressor(n_estimators=100, random_state=0)
     clf.fit(scaled_data, target_series)
-    
+
     # Get the feature importances
     importances = clf.feature_importances_
-    feature_importances = pd.DataFrame({'Feature': feature_names, 'Importance': importances})
-    
+    feature_importances = pd.DataFrame(
+        {'Feature': feature_names, 'Importance': importances})
+
     # Sort the feature importances in descending order
-    feature_importances = feature_importances.sort_values('Importance', ascending=False)
-    
+    feature_importances = feature_importances.sort_values(
+        'Importance', ascending=False)
+
     # Create the bar chart
-    fig = px.bar(feature_importances, x='Importance', y='Feature', title=f'Feature Importances for {target}')
+    fig = px.bar(feature_importances, x='Importance', y='Feature',
+                 title=f'Feature Importances for {target}')
     fig.update_layout(
         yaxis=dict(categoryorder='total ascending'),
         width=700,  # Set the width of the graph
@@ -1684,9 +1753,11 @@ def plot_feature_importances_regression(df: pd.DataFrame, target: str):
         hoverlabel=dict(bgcolor='white'),
         template='simple_white'  # Set the template to simple_white
     )
-    fig.update_traces(marker_color='rgba(128, 60, 170, 0.9)')  # Set the bar color to mediumpurple
-    
+    # Set the bar color to mediumpurple
+    fig.update_traces(marker_color='rgba(128, 60, 170, 0.9)')
+
     return fig
+
 
 def linear_regression_with_vif(df: pd.DataFrame, target_column: str) -> None:
     """
@@ -1707,10 +1778,12 @@ def linear_regression_with_vif(df: pd.DataFrame, target_column: str) -> None:
     The variance inflation factor (VIF) is calculated for each feature, and the results are displayed along with the model summary.
     """
     # Select numeric columns and drop rows with missing values
-    num_columns = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    num_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
     df_tmp = df[num_columns].dropna()
     if target_column not in df_tmp.columns:
-        raise ValueError(f"Target column '{target_column}' not found in the DataFrame.")
+        raise ValueError(
+            f"Target column '{target_column}' not found in the DataFrame.")
     # Split data into features (X) and target (y)
     X = df_tmp.drop(columns=target_column)
     y = df_tmp[target_column]
@@ -1730,3 +1803,32 @@ def linear_regression_with_vif(df: pd.DataFrame, target_column: str) -> None:
     # Display results
     display(res.iloc[1:])  # exclude the constant term
     display(model.summary())
+
+
+def categorical_heatmap_matrix_gen(df):
+    """
+    Generate a heatmap matrix for all possible combinations of categorical variables in a dataframe.
+
+    This function takes a pandas DataFrame as input and generates a heatmap matrix for each pair of categorical variables.
+    The heatmap matrix is a visual representation of the cross-tabulation of two categorical variables, which can help identify patterns and relationships between them.
+
+    Parameters:
+    df (pandas DataFrame): Input DataFrame containing categorical variables.
+
+    Returns:
+    None
+    """
+    # Получаем список категориальных переменных
+    categorical_cols = df.select_dtypes(include=['category']).columns
+
+    # Перебираем все возможные комбинации категориальных переменных
+    for col1, col2 in itertools.combinations(categorical_cols, 2):
+        # Создаем матрицу тепловой карты
+        heatmap_matrix = pd.crosstab(df[col1], df[col2])
+
+        # Визуализируем матрицу тепловой карты
+        fig = heatmap(
+            heatmap_matrix, title=f'Матрица тепловой карты для {col1} и {col2}')
+        plotly_default_settings(fig)
+        fig.show()
+        yield
