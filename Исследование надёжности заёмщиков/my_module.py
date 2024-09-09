@@ -16,11 +16,26 @@ import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 import plotly.io as pio
 import plotly.graph_objects as go
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output
 
 colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4']
 colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2']
+colorway_for_treemap = [
+    'rgba(148, 100, 170, 1)',
+    'rgba(50, 156, 179, 1)',
+    'rgba(99, 113, 156, 1)',
+    'rgba(92, 107, 192, 1)',
+    'rgba(0, 90, 91, 1)',
+    'rgba(3, 169, 244, 1)',
+    'rgba(217, 119, 136, 1)',
+    'rgba(64, 134, 87, 1)',
+    'rgba(134, 96, 147, 1)',
+        'rgba(132, 169, 233, 1)']
 # default setting for Plotly
 # for line plot
 pio.templates["custom_theme_for_line"] = go.layout.Template(
@@ -1832,3 +1847,82 @@ def categorical_heatmap_matrix_gen(df):
         plotly_default_settings(fig)
         fig.show()
         yield
+
+def treemap_dash(df, columns):
+    """
+    Создает интерактивный treemap с помощью Dash и Plotly.
+
+    Параметры:
+    df (pandas.DataFrame): датафрейм с данными для treemap.
+    columns (list): список столбцов, которые будут использоваться для создания treemap.
+
+    Возвращает:
+    app (dash.Dash): прилоожение Dash с интерактивным treemap.
+    """
+
+    app = dash.Dash(__name__)
+
+    app.layout = html.Div([
+        dcc.Dropdown(
+            id='reorder-dropdown',
+            options=[{'label': col, 'value': col} for col in columns],
+            value=columns,
+            multi=True
+        ),
+        dcc.Graph(id='treemap-graph')
+    ])
+
+    @app.callback(
+        Output('treemap-graph', 'figure'),
+        [Input('reorder-dropdown', 'value')]
+    )
+    def update_treemap(value):
+        fig = px.treemap(df, path=[px.Constant('All')] + value,
+                         color_discrete_sequence=[
+                             'rgba(148, 100, 170, 1)',
+                             'rgba(50, 156, 179, 1)',
+                             'rgba(99, 113, 156, 1)',
+                             'rgba(92, 107, 192, 1)',
+                             'rgba(0, 90, 91, 1)',
+                             'rgba(3, 169, 244, 1)',
+                             'rgba(217, 119, 136, 1)',
+                             'rgba(64, 134, 87, 1)',
+                             'rgba(134, 96, 147, 1)',
+                             'rgba(132, 169, 233, 1)'
+                         ])
+        fig.update_traces(root_color="lightgrey", hovertemplate="<b>%{label}<br>%{value}</b>")
+        fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
+        fig.update_traces(hoverlabel=dict(bgcolor="white"))
+        return fig
+
+    return app
+
+def treemap(df, columns):
+    """
+    Creates an interactive treemap using Plotly.
+
+    Parameters:
+    df (pandas.DataFrame): dataframe with data for the treemap.
+    columns (list): list of columns to use for the treemap.
+
+    Returns:
+    fig (plotly.graph_objs.Figure): interactive treemap figure.
+    """
+    fig = px.treemap(df, path=[px.Constant('All')] + columns,
+                     color_discrete_sequence=[
+                         'rgba(148, 100, 170, 1)',
+                         'rgba(50, 156, 179, 1)',
+                         'rgba(99, 113, 156, 1)',
+                         'rgba(92, 107, 192, 1)',
+                         'rgba(0, 90, 91, 1)',
+                         'rgba(3, 169, 244, 1)',
+                         'rgba(217, 119, 136, 1)',
+                         'rgba(64, 134, 87, 1)',
+                         'rgba(134, 96, 147, 1)',
+                         'rgba(132, 169, 233, 1)'
+                     ])
+    fig.update_traces(root_color="silver", hovertemplate="<b>%{label}<br>%{value}</b>")
+    fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
+    fig.update_traces(hoverlabel=dict(bgcolor="white"))
+    return fig
+
