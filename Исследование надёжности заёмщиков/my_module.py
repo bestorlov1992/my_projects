@@ -17,8 +17,7 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 import plotly.io as pio
 import plotly.graph_objects as go
 import dash
-import dash_core_components as dcc
-import dash_html_components as html
+from dash import dcc, html
 from dash.dependencies import Input, Output
 
 colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
@@ -1859,7 +1858,8 @@ def treemap_dash(df, columns):
     Возвращает:
     app (dash.Dash): прилоожение Dash с интерактивным treemap.
     """
-
+    date_columns = filter(
+            lambda x: pd.api.types.is_datetime64_any_dtype(df[x]), df.columns)
     app = dash.Dash(__name__)
 
     app.layout = html.Div([
@@ -1925,4 +1925,426 @@ def treemap(df, columns):
     fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
     fig.update_traces(hoverlabel=dict(bgcolor="white"))
     return fig
+
+def treemap_dash(df):
+    """
+    Создает интерактивный treemap с помощью Dash и Plotly.
+
+    Параметры:
+    df (pandas.DataFrame): датафрейм с данными для treemap.
+    columns (list): список столбцов, которые будут использоваться для создания treemap.
+
+    Возвращает:
+    app (dash.Dash): прилоожение Dash с интерактивным treemap.
+    
+    ```
+    app = treemap_dash(df)
+    if __name__ == '__main__':
+        app.run_server(debug=True)
+    ```
+    """
+    categroy_columns = [
+        col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+    app = dash.Dash(__name__)
+
+    app.layout = html.Div([
+        dcc.Dropdown(
+            id='reorder-dropdown',
+            options=[{'label': col, 'value': col} for col in categroy_columns],
+            value=categroy_columns[:2],
+            multi=True
+        ),
+        dcc.Graph(id='treemap-graph')
+    ])
+
+    @app.callback(
+        Output('treemap-graph', 'figure'),
+        [Input('reorder-dropdown', 'value')]
+    )
+    def update_treemap(value):
+        fig = px.treemap(df, path=[px.Constant('All')] + value,
+                         color_discrete_sequence=[
+                             'rgba(148, 100, 170, 1)',
+                             'rgba(50, 156, 179, 1)',
+                             'rgba(99, 113, 156, 1)',
+                             'rgba(92, 107, 192, 1)',
+                             'rgba(0, 90, 91, 1)',
+                             'rgba(3, 169, 244, 1)',
+                             'rgba(217, 119, 136, 1)',
+                             'rgba(64, 134, 87, 1)',
+                             'rgba(134, 96, 147, 1)',
+                             'rgba(132, 169, 233, 1)'
+                         ])
+        fig.update_traces(root_color="lightgrey", hovertemplate="<b>%{label}<br>%{value}</b>")
+        fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
+        fig.update_traces(hoverlabel=dict(bgcolor="white"))
+        return fig
+
+    return app
+
+def parallel_categories(df, columns):
+    """
+    Creates an interactive parallel_categories using Plotly.
+
+    Parameters:
+    df (pandas.DataFrame): dataframe with data for the parallel_categories.
+    columns (list): list of columns to use for the parallel_categories.
+
+    Returns:
+    fig (plotly.graph_objs.Figure): interactive parallel_categories figure.
+    """
+    # Создание значений цвета
+    color_values = [1 for _ in range(df.shape[0])]
+
+    # Создание параллельных категорий
+    fig = px.parallel_categories(df, dimensions=columns, color=color_values, 
+                                 color_continuous_scale = [
+                                [0, 'rgba(128, 60, 170, 0.9)'],
+                                [1, 'rgba(128, 60, 170, 0.9)']]
+    )
+
+    # Скрытие цветовой шкалы
+    if fig.layout.coloraxis:
+        fig.update_layout(coloraxis_showscale=False)
+    else:
+        print("Цветовая шкала не существует")
+
+    # Обновление макета
+    fig.update_layout(margin=dict(t=50, l=150, r=150, b=25))
+
+    return fig
+
+def parallel_categories_dash(df):
+    """
+    Creates a Dash application with an interactive parallel_categories using Plotly.
+
+    Parameters:
+    df (pandas.DataFrame): dataframe with data for the parallel_categories.
+
+    Returns:
+    app (dash.Dash): Dash application with interactive parallel_categories figure.
+        
+    ```
+    app = treemap_dash(df)
+    if __name__ == '__main__':
+        app.run_server(debug=True)
+    ```
+    """
+    categroy_columns = [
+        col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+    # Создание Dash-приложения
+    app = dash.Dash(__name__)
+
+
+    app.layout = html.Div([
+        # html.H1('Parallel Categories'),
+        dcc.Dropdown(
+            id='columns-dropdown',
+            options=[{'label': col, 'value': col} for col in categroy_columns],
+            value=categroy_columns[:2],  # Значение по умолчанию
+            multi=True
+        ),
+        dcc.Graph(id='parallel-categories-graph')
+    ])
+
+    # Обновление графика при изменении выбора столбцов
+    @app.callback(
+        Output('parallel-categories-graph', 'figure'),
+        [Input('columns-dropdown', 'value')]
+    )
+    def update_graph(selected_columns):
+        # Создание параллельных категорий
+        color_values = [1 for _ in range(df.shape[0])]
+        fig = px.parallel_categories(df, dimensions=selected_columns, color=color_values, 
+                                    color_continuous_scale = [
+                                    [0, 'rgba(128, 60, 170, 0.7)'],
+                                    [1, 'rgba(128, 60, 170, 0.7)']]
+        )
+
+        # Скрытие цветовой шкалы
+        if fig.layout.coloraxis:
+            fig.update_layout(coloraxis_showscale=False)
+        else:
+            print("Цветовая шкала не существует")
+
+        # Обновление макета
+        fig.update_layout(margin=dict(t=50, l=150, r=150, b=25))
+
+        return fig
+
+    return app
+
+def sankey(df, columns):
+    """
+    Создает Sankey-диаграмму
+
+    Parameters:
+    df (pandas.DataFrame): входной DataFrame
+    columns (list): список столбцов для Sankey-диаграммы
+
+    Returns:
+    fig (plotly.graph_objects.Figure): Sankey-диаграмма
+    """
+    def prepare_data(df, columns):
+        """
+        Подготавливает данные для Sankey-диаграммы.
+
+        Parameters:
+        df (pandas.DataFrame): входной DataFrame
+        columns (list): список столбцов для Sankey-диаграммы
+
+        Returns:
+        sankey_df (pandas.DataFrame): подготовленный DataFrame для Sankey-диаграммы
+        """
+        df_in = df.dropna().copy()
+        columns_len = len(columns)
+        temp_df = pd.DataFrame()
+        for i in range(columns_len - 1):
+            current_columns = columns[i:i+2]
+            df_grouped = df_in[current_columns].groupby(current_columns).size().reset_index()
+            temp_df = pd.concat([temp_df, df_grouped
+                                        .rename(columns={columns[i]: 'source_name', columns[i+1]: 'target_name'})], axis=0)
+        sankey_df = temp_df.reset_index(drop=True).rename(columns={0: 'value'})
+        return sankey_df
+
+    def create_sankey_nodes(sankey_df):
+        """
+        Создает узлы для Sankey-диаграммы.
+
+        Parameters:
+        sankey_df (pandas.DataFrame): подготовленный DataFrame для Sankey-диаграммы
+        colors (list): список цветов для узлов
+
+        Returns:
+        nodes_with_indexes (dict): словарь узлов с индексами
+        node_colors (list): список цветов узлов
+        """
+        nodes = pd.concat([sankey_df['source_name'], sankey_df['target_name']], axis=0).unique().tolist()
+        nodes_with_indexes = {key: [val] for val, key in enumerate(nodes)}
+        colors = [
+            'rgba(148, 100, 170, 1)',
+            'rgba(50, 156, 179, 1)',
+            'rgba(99, 113, 156, 1)',
+            'rgba(92, 107, 192, 1)',
+            'rgba(0, 90, 91, 1)',
+            'rgba(3, 169, 244, 1)',
+            'rgba(217, 119, 136, 1)',
+            'rgba(64, 134, 87, 1)',
+            'rgba(134, 96, 147, 1)',
+                'rgba(132, 169, 233, 1)']
+        node_colors = []
+        colors = itertools.cycle(colors)
+        for node in nodes_with_indexes.keys():
+            color = next(colors)
+            nodes_with_indexes[node].append(color)
+            node_colors.append(color)
+        return nodes_with_indexes, node_colors
+
+    def create_sankey_links(sankey_df, nodes_with_indexes):
+        """
+        Создает связи для Sankey-диаграммы.
+
+        Parameters:
+        sankey_df (pandas.DataFrame): подготовленный DataFrame для Sankey-диаграммы
+        nodes_with_indexes (dict): словарь узлов с индексами
+
+        Returns:
+        link_color (list): список цветов связей
+        """
+        link_color = [nodes_with_indexes[source][1].replace(', 1)', ', 0.2)') for source in sankey_df['source_name']]
+        return link_color
+    sankey_df = prepare_data(df, columns)
+    nodes_with_indexes, node_colors = create_sankey_nodes(sankey_df)
+    link_color = create_sankey_links(sankey_df, nodes_with_indexes)
+    sankey_df['source'] = sankey_df['source_name'].apply(lambda x: nodes_with_indexes[x][0])
+    sankey_df['target'] = sankey_df['target_name'].apply(lambda x: nodes_with_indexes[x][0])
+    sankey_df['sum_value'] = sankey_df.groupby('source_name')['value'].transform('sum')
+    sankey_df['value_percent'] = round(sankey_df['value'] * 100 / sankey_df['sum_value'], 2)
+    sankey_df['value_percent'] = sankey_df['value_percent'].apply(lambda x: f"{x}%")
+    fig = go.Figure(data=[go.Sankey(
+        domain = dict(
+        x =  [0,1],
+        y =  [0,1]
+        ),
+        orientation = "h",
+        valueformat = ".0f",
+        node = dict(
+        pad = 10,
+        thickness = 15,
+        line = dict(color = "black", width = 0.1),
+        label =  list(nodes_with_indexes.keys()),
+        color = node_colors
+        ),
+        link = dict(
+        source = sankey_df['source'],
+        target = sankey_df['target'],
+        value  = sankey_df['value'],
+        label = sankey_df['value_percent'],
+        color = link_color
+    )
+    )])
+
+    layout = dict(
+            title = f"Sankey Diagram for {', '.join(columns)}",
+            height = 772,
+            font = dict(
+            size = 10),)
+
+    fig.update_layout(layout)  
+    return fig
+
+def sankey_dash(df):
+    """
+    Создает Sankey-диаграмму
+
+    Parameters:
+    df (pandas.DataFrame): входной DataFrame
+    columns (list): список столбцов для Sankey-диаграммы
+
+    Returns:
+    app (dash.Dash): Dash application with interactive parallel_categories figure.
+        
+    ```
+    app = sankey_dash(df)
+    if __name__ == '__main__':
+        app.run_server(debug=True)
+    ```
+    """
+    def prepare_data(df, columns):
+        """
+        Подготавливает данные для Sankey-диаграммы.
+
+        Parameters:
+        df (pandas.DataFrame): входной DataFrame
+        columns (list): список столбцов для Sankey-диаграммы
+
+        Returns:
+        sankey_df (pandas.DataFrame): подготовленный DataFrame для Sankey-диаграммы
+        """
+        df_in = df.dropna().copy()
+        columns_len = len(columns)
+        temp_df = pd.DataFrame()
+        for i in range(columns_len - 1):
+            current_columns = columns[i:i+2]
+            df_grouped = df_in[current_columns].groupby(current_columns).size().reset_index()
+            temp_df = pd.concat([temp_df, df_grouped
+                                        .rename(columns={columns[i]: 'source_name', columns[i+1]: 'target_name'})], axis=0)
+        sankey_df = temp_df.reset_index(drop=True).rename(columns={0: 'value'})
+        return sankey_df
+
+    def create_sankey_nodes(sankey_df):
+        """
+        Создает узлы для Sankey-диаграммы.
+
+        Parameters:
+        sankey_df (pandas.DataFrame): подготовленный DataFrame для Sankey-диаграммы
+        colors (list): список цветов для узлов
+
+        Returns:
+        nodes_with_indexes (dict): словарь узлов с индексами
+        node_colors (list): список цветов узлов
+        """
+        nodes = pd.concat([sankey_df['source_name'], sankey_df['target_name']], axis=0).unique().tolist()
+        nodes_with_indexes = {key: [val] for val, key in enumerate(nodes)}
+        colors = [
+            'rgba(148, 100, 170, 1)',
+            'rgba(50, 156, 179, 1)',
+            'rgba(99, 113, 156, 1)',
+            'rgba(92, 107, 192, 1)',
+            'rgba(0, 90, 91, 1)',
+            'rgba(3, 169, 244, 1)',
+            'rgba(217, 119, 136, 1)',
+            'rgba(64, 134, 87, 1)',
+            'rgba(134, 96, 147, 1)',
+                'rgba(132, 169, 233, 1)']
+        node_colors = []
+        colors = itertools.cycle(colors)
+        for node in nodes_with_indexes.keys():
+            color = next(colors)
+            nodes_with_indexes[node].append(color)
+            node_colors.append(color)
+        return nodes_with_indexes, node_colors
+
+    def create_sankey_links(sankey_df, nodes_with_indexes):
+        """
+        Создает связи для Sankey-диаграммы.
+
+        Parameters:
+        sankey_df (pandas.DataFrame): подготовленный DataFrame для Sankey-диаграммы
+        nodes_with_indexes (dict): словарь узлов с индексами
+
+        Returns:
+        link_color (list): список цветов связей
+        """
+        link_color = [nodes_with_indexes[source][1].replace(', 1)', ', 0.2)') for source in sankey_df['source_name']]
+        return link_color
+
+    categroy_columns = [
+        col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+    # Создание Dash-приложения
+    app = dash.Dash(__name__)
+    app.layout = html.Div([
+        # html.H1('Parallel Categories'),
+        dcc.Dropdown(
+            id='columns-dropdown',
+            options=[{'label': col, 'value': col} for col in categroy_columns],
+            value=categroy_columns[:2],  # Значение по умолчанию
+            multi=True
+        ),
+        dcc.Graph(id='sankey-graph')
+    ])
+
+    # Обновление графика при изменении выбора столбцов
+    @app.callback(
+        Output('sankey-graph', 'figure'),
+        [Input('columns-dropdown', 'value')]
+    )
+    def update_graph(selected_columns):
+        # Создание sankey
+        if len(selected_columns) < 2:
+            selected_columns = categroy_columns[:2]
+        sankey_df = prepare_data(df, selected_columns)
+        nodes_with_indexes, node_colors = create_sankey_nodes(sankey_df)
+        link_color = create_sankey_links(sankey_df, nodes_with_indexes)
+        sankey_df['source'] = sankey_df['source_name'].apply(lambda x: nodes_with_indexes[x][0])
+        sankey_df['target'] = sankey_df['target_name'].apply(lambda x: nodes_with_indexes[x][0])
+        sankey_df['sum_value'] = sankey_df.groupby('source_name')['value'].transform('sum')
+        sankey_df['value_percent'] = round(sankey_df['value'] * 100 / sankey_df['sum_value'], 2)
+        sankey_df['value_percent'] = sankey_df['value_percent'].apply(lambda x: f"{x}%")
+        fig = go.Figure(data=[go.Sankey(
+            domain = dict(
+            x =  [0,1],
+            y =  [0,1]
+            ),
+            orientation = "h",
+            valueformat = ".0f",
+            node = dict(
+            pad = 10,
+            thickness = 15,
+            line = dict(color = "black", width = 0.1),
+            label =  list(nodes_with_indexes.keys()),
+            color = node_colors
+            ),
+            link = dict(
+            source = sankey_df['source'],
+            target = sankey_df['target'],
+            value  = sankey_df['value'],
+            label = sankey_df['value_percent'],
+            color = link_color
+        )
+        )])
+
+        layout = dict(
+                title = f"Sankey Diagram for {', '.join(selected_columns)}",
+                height = 772,
+                font = dict(
+                size = 10),)
+
+        fig.update_layout(layout)  
+
+        return fig
+
+    return app
+
+
 
