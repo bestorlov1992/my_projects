@@ -2347,3 +2347,143 @@ def sankey_dash(df):
     return app
 
 
+
+
+# =========================================================================================
+# =========================================================================================
+# =========================================================================================
+# def prepare_df(config):
+#     df = config['df']
+#     cat_column = config['cat_column']
+#     num_column = config['num_column']
+#     func = config.get('func', 'sum')  # default to 'sum' if not provided
+#     if func == 'mode':
+#         # Обработка случая для моды
+#         func = lambda x: x.mode().iloc[0] 
+#         return df[[cat_column, num_column]]\
+#             .groupby(cat_column) \
+#             .agg(num = (num_column, func), modes = (num_column, lambda x: x.mode().to_list())) \
+#             .reset_index() \
+#             .sort_values('num', ascending=False).rename(columns={'num': num_column})
+#     else:
+#         return df[[cat_column, num_column]] \
+#             .groupby(cat_column) \
+#             .agg(num = (num_column, func), modes = (num_column, lambda x: '')) \
+#             .reset_index() \
+#             .sort_values('num', ascending=False).rename(columns={'num': num_column})
+
+# def create_figure(config):
+#     df_for_fig = prepare_df(config)
+#     x = df_for_fig[config['cat_column']]
+#     y = df_for_fig[config['num_column']]
+
+#     bar_fig = go.Bar(x=x, y=y, name='')
+#     line_fig = go.Scatter(x=x, y=y, mode='lines', visible=False, name='')
+#     area_fig = go.Scatter(x=x, y=y, mode='lines', fill='tozeroy', visible=False, name='')
+#     return go.Figure(data=[bar_fig, line_fig, area_fig])
+
+# def create_buttons(config):
+#     buttons = []
+#     # print(len(fig.data))
+#     # print(fig['layout']['yaxis']['orientation'])
+#         # orientation = fig['layout']['yaxis']['orientation'] if fig['layout']['yaxis']['orientation'] in ['v', 'h'] else fig['layout']['xaxis']['orientation']
+#     df, cat_column, num_column = config['df'], config['cat_column'], config['num_column']
+#     buttons.append(dict(label='Ver', method='update', args=[{'orientation': 'v'}]))
+#     buttons.append(dict(label='Hor', method='update', args=[{'orientation': 'h'}]))
+#     buttons.append(dict(label='Bar', method='update', args=[{'visible': [True, False, False]}]))
+#     buttons.append(dict(label='Line', method='update', args=[{'visible': [False, True, False]}]))
+#     buttons.append(dict(label='Area', method='update', args=[{'visible': [False, False, True]}]))
+#     for func in ['sum', 'mean', 'median', 'count', 'mode', 'std', 'min', 'max']:
+#         config['func'] = func
+#         if func == 'mode':
+#             buttons.append(dict(label=f'Agg {func.capitalize()}'
+#                                 , method='update'
+#                                 , args=[{
+#                                     'orientation': 'v'
+#                                     , 'x': [prepare_df(config)[cat_column].to_list()] 
+#                                     , 'y': [prepare_df(config)[num_column].to_list()] 
+#                                 # , args=[{'x': [prepare_df(config)[cat_column].to_list()] 
+#                                 #             if any([fig.data[i]['orientation'] == 'v' for i in range(len(fig.data))]) 
+#                                 #             else [prepare_df(config)[num_column].to_list()]
+#                                 #         , 'y': [prepare_df(config)[num_column].to_list()] 
+#                                 #             if any([fig.data[i]['orientation'] == 'v' for i in range(len(fig.data))]) 
+#                                 #             else [prepare_df(config)[cat_column].to_list()]
+#                                         # , 'text': [[', '.join(map(str,x)) for x in prepare_df(config)['modes'].to_list()]]
+#                                         # , 'hovertemplate': '<br>Value: %{y:.2f}<br>Modes: %{text}'
+#                                         # , 'marker': {'color': ['#049CB3' if len(x) > 1 else 'rgba(128, 60, 170, 0.9)' for x in prepare_df(config)['modes'].to_list()]}
+#                                         # , 'textposition': 'none'
+#                                         # , 'textposition': 'auto'
+#                                         # , 'textfont': {'color': 'black'}
+#                                         }]))
+#         else:
+#             buttons.append(dict(label=f'Agg {func.capitalize()}'
+#                                 , method='update'
+#                                 , args=[{
+#                                     'orientation': 'v'
+#                                     , 'x': [prepare_df(config)[cat_column].to_list()] 
+#                                     , 'y': [prepare_df(config)[num_column].to_list()] 
+#                                         #  'x': [prepare_df(config)[cat_column].to_list()] 
+#                                         # , 'y': [prepare_df(config)[num_column].to_list()]    
+#                                         # , 'text': ['']
+#                                         # , 'hovertemplate': '<br>Value: %{y:.2f}'
+#                                         # , 'marker': {'color': ['rgba(128, 60, 170, 0.9)' for x in prepare_df(config)['modes'].to_list()]}
+#                                         # , 'textposition': 'none'
+#                                         # , 'textposition': 'auto'
+#                                         # , 'textfont': {'color': 'black'}
+#                                         }]))
+#     return buttons
+
+# def update_layout(fig, buttons):
+#     fig.update_layout(
+#         updatemenus=[
+#             dict(
+#                 type="buttons",
+#                 direction="left",
+#                 buttons=buttons[:2],  # first 3 buttons (Bar, Line, Area)
+#                 pad={"r": 10, "t": 70},
+#                 showactive=True,
+#                 x=0,
+#                 xanchor="left",
+#                 y=1.1,
+#                 yanchor="bottom"
+#             ),            
+#             dict(
+#                 type="buttons",
+#                 direction="left",
+#                 buttons=buttons[2:5],  # first 3 buttons (Bar, Line, Area)
+#                 pad={"l": 120, "r": 10, "t": 70},
+#                 showactive=True,
+#                 x=0,
+#                 xanchor="left",
+#                 y=1.1,
+#                 yanchor="bottom"
+#             ),
+#             dict(
+#                 type="buttons",
+#                 direction="left",
+#                 buttons=buttons[5:],  # remaining buttons (Agg functions)
+#                 pad={"l": 300, "r": 10, "t": 70},  # add left padding to separate from previous group
+#                 showactive=True,
+#                 x=0,
+#                 xanchor="left",
+#                 y=1.1,
+#                 yanchor="bottom"
+#             ),
+#         ]
+#     )
+
+# config = {
+#     'df': df,
+#     'cat_column': 'education',
+#     'num_column': 'dob_years',
+#     'func': 'sum'
+# }
+
+# fig = create_figure(config)
+# buttons = create_buttons(config)
+# update_layout(fig, buttons)
+# fig.update_layout(height = 500
+#                 #  , title={'text': f"{config['num_column']}<br>{'cat_column'}", 'y': 0.9}
+#                   , xaxis={'title': config['cat_column']}
+#                   , yaxis={'title': config['num_column']})
+# fig.show(config=dict(displayModeBar=True))
