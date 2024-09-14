@@ -74,6 +74,7 @@ px.defaults.color_discrete_sequence = colorway_for_bar
 
 
 def plotly_default_settings(fig):
+    # Segoe UI Light
     fig.update_layout(
         title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)"),
         title={'text': f'<b>{fig.layout.title.text}</b>'},
