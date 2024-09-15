@@ -1614,6 +1614,7 @@ def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, ya
     ))
 
     # Create annotations
+    center_color_bar = (df.max().max() + df.min().min()) * 0.7
     annotations = [
         dict(
             text=f"{df.values[row, col]:.{decimal_places}f}",
@@ -1621,8 +1622,8 @@ def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, ya
             y=row,
             showarrow=False,
             font=dict(
-                color="black" if df.values[row, col] < (
-                    df.values.max() - df.values.min()) / 2 else "white",
+                color="black" if df.values[row, col] <
+                    center_color_bar else "white",
                 size=font_size
             )
         )
@@ -2474,7 +2475,7 @@ def sankey_dash(df):
 #                 pad={"l": 300, "r": 10, "t": 70},  # add left padding to separate from previous group
 #                 showactive=True,
 #                 x=0,
-#                 xanchor="left",
+#                 xanchor="left",pad
 #                 y=1.1,
 #                 yanchor="bottom"
 #             ),
