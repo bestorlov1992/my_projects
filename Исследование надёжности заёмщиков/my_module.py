@@ -1907,19 +1907,20 @@ def treemap_dash(df, columns):
 
     return app
 
-def treemap(df, columns):
+def treemap(df, columns, values=None):
     """
     Creates an interactive treemap using Plotly.
 
     Parameters:
     df (pandas.DataFrame): dataframe with data for the treemap.
     columns (list): list of columns to use for the treemap.
-
+    values (str): column for values, if None - values  will be calculated as count.
     Returns:
     fig (plotly.graph_objs.Figure): interactive treemap figure.
     """
-    fig = px.treemap(df, path=[px.Constant('All')] + columns,
-                     color_discrete_sequence=[
+    fig = px.treemap(df, path=[px.Constant('All')] + columns
+                     , values = values
+                     , color_discrete_sequence=[
                          'rgba(148, 100, 170, 1)',
                          'rgba(50, 156, 179, 1)',
                          'rgba(99, 113, 156, 1)',
