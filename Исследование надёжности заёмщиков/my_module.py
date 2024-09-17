@@ -1932,7 +1932,7 @@ def treemap(df, columns, values=None):
                          'rgba(134, 96, 147, 1)',
                          'rgba(132, 169, 233, 1)'
                      ])
-    fig.update_traces(root_color="silver", hovertemplate="<b>%{label}<br>%{value}</b>")
+    fig.update_traces(root_color="silver", hovertemplate="<b>%{label}<br>%{value:.2f}</b>")
     fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
     fig.update_traces(hoverlabel=dict(bgcolor="white"))
     return fig
@@ -2085,7 +2085,7 @@ def parallel_categories_dash(df):
 
     return app
 
-def sankey(df, columns):
+def sankey(df, columns, values_column=None, func='sum'):
     """
     Создает Sankey-диаграмму
 
@@ -2096,7 +2096,7 @@ def sankey(df, columns):
     Returns:
     fig (plotly.graph_objects.Figure): Sankey-диаграмма
     """
-    def prepare_data(df, columns):
+    def prepare_data(df, columns, values_column, func):
         """
         Подготавливает данные для Sankey-диаграммы.
 
@@ -2107,15 +2107,22 @@ def sankey(df, columns):
         Returns:
         sankey_df (pandas.DataFrame): подготовленный DataFrame для Sankey-диаграммы
         """
-        df_in = df.dropna().copy()
+        df_in = df.fillna(value={values_column: 0}).copy()
         columns_len = len(columns)
         temp_df = pd.DataFrame()
+        if func == 'mode':
+            func = lambda x: x.mode().iloc[0] 
+        if func == 'range':
+            func = lambda x: x.max() - x.min()
         for i in range(columns_len - 1):
             current_columns = columns[i:i+2]
-            df_grouped = df_in[current_columns].groupby(current_columns).size().reset_index()
+            if values_column:
+                df_grouped = df_in[current_columns+[values_column]].groupby(current_columns)[[values_column]].agg(value = (values_column, func)).reset_index()
+            else:
+                df_grouped = df_in[current_columns].groupby(current_columns).size().reset_index().rename(columns={0: 'value'})
             temp_df = pd.concat([temp_df, df_grouped
                                         .rename(columns={columns[i]: 'source_name', columns[i+1]: 'target_name'})], axis=0)
-        sankey_df = temp_df.reset_index(drop=True).rename(columns={0: 'value'})
+        sankey_df = temp_df.reset_index(drop=True)
         return sankey_df
 
     def create_sankey_nodes(sankey_df):
@@ -2164,7 +2171,7 @@ def sankey(df, columns):
         """
         link_color = [nodes_with_indexes[source][1].replace(', 1)', ', 0.2)') for source in sankey_df['source_name']]
         return link_color
-    sankey_df = prepare_data(df, columns)
+    sankey_df = prepare_data(df, columns, values_column, func)
     nodes_with_indexes, node_colors = create_sankey_nodes(sankey_df)
     link_color = create_sankey_links(sankey_df, nodes_with_indexes)
     sankey_df['source'] = sankey_df['source_name'].apply(lambda x: nodes_with_indexes[x][0])
@@ -2196,7 +2203,8 @@ def sankey(df, columns):
     )])
 
     layout = dict(
-            title = f"Sankey Diagram for {', '.join(columns)}",
+            title = f"Sankey Diagram for {', '.join(columns+[values_column])}" if values_column else
+            f"Sankey Diagram for {', '.join(columns)}",
             height = 772,
             font = dict(
             size = 10),)
