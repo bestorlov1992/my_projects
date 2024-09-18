@@ -2085,7 +2085,7 @@ def parallel_categories_dash(df):
 
     return app
 
-def sankey(df, columns, values_column=None, func='sum'):
+def sankey(df, columns, values_column=None, func='sum', mode='fig'):
     """
     Создает Sankey-диаграмму
 
@@ -2179,38 +2179,46 @@ def sankey(df, columns, values_column=None, func='sum'):
     sankey_df['sum_value'] = sankey_df.groupby('source_name')['value'].transform('sum')
     sankey_df['value_percent'] = round(sankey_df['value'] * 100 / sankey_df['sum_value'], 2)
     sankey_df['value_percent'] = sankey_df['value_percent'].apply(lambda x: f"{x}%")
-    fig = go.Figure(data=[go.Sankey(
-        domain = dict(
-        x =  [0,1],
-        y =  [0,1]
-        ),
-        orientation = "h",
-        valueformat = ".0f",
-        node = dict(
-        pad = 10,
-        thickness = 15,
-        line = dict(color = "black", width = 0.1),
-        label =  list(nodes_with_indexes.keys()),
-        color = node_colors
-        ),
-        link = dict(
-        source = sankey_df['source'],
-        target = sankey_df['target'],
-        value  = sankey_df['value'],
-        label = sankey_df['value_percent'],
-        color = link_color
-    )
-    )])
+    if mode == 'fig':
+        fig = go.Figure(data=[go.Sankey(
+            domain = dict(
+            x =  [0,1],
+            y =  [0,1]
+            ),
+            orientation = "h",
+            valueformat = ".0f",
+            node = dict(
+            pad = 10,
+            thickness = 15,
+            line = dict(color = "black", width = 0.1),
+            label =  list(nodes_with_indexes.keys()),
+            color = node_colors
+            ),
+            link = dict(
+            source = sankey_df['source'],
+            target = sankey_df['target'],
+            value  = sankey_df['value'],
+            label = sankey_df['value_percent'],
+            color = link_color
+        )
+        )])
 
-    layout = dict(
-            title = f"Sankey Diagram for {', '.join(columns+[values_column])}" if values_column else
-            f"Sankey Diagram for {', '.join(columns)}",
-            height = 772,
-            font = dict(
-            size = 10),)
+        layout = dict(
+                title = f"Sankey Diagram for {', '.join(columns+[values_column])}" if values_column else
+                f"Sankey Diagram for {', '.join(columns)}",
+                height = 772,
+                font = dict(
+                size = 10),)
 
-    fig.update_layout(layout)  
-    return fig
+        fig.update_layout(layout)  
+        return fig
+    if mode == 'data':
+        sankey_dict = {}
+        sankey_dict['sankey_df'] = sankey_df
+        sankey_dict['nodes_with_indexes'] = nodes_with_indexes
+        sankey_dict['node_colors'] = node_colors
+        sankey_dict['link_color'] = link_color
+        return sankey_dict
 
 def sankey_dash(df):
     """
