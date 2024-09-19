@@ -2373,144 +2373,705 @@ def sankey_dash(df):
 
     return app
 
+def graph_analysis(df, cat_coluns, num_column):
+    """
+    Perform graph analysis and create visualizations based on the provided dataframe and configuration.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input dataframe.
+    cat_columns : list
+        List of categorical columns.
+    num_column : str
+        Name of the numeric column.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    This function prepares the dataframe for plotting, creates visualizations (such as bar, line, and area plots, heatmaps, treemaps, and sankey diagrams),
+    and updates the layout of the plots based on the provided configuration.
+    It uses the `prepare_df` and `prepare_data_treemap` functions to prepare the data for plotting.
+    """    
+    if len(cat_coluns) != 2:
+        raise Exception('cat_coluns must be  a list of two columns')
+    if not isinstance(num_column, str):
+        raise Exception('num_column must be  str')
+    df_coluns = df.columns
+    if cat_coluns[0]  not in df_coluns or cat_coluns[1] not in df_coluns or num_column not in df_coluns:
+        raise Exception('cat_coluns and num_column must be  in df.columns')
+    if not pd.api.types.is_categorical_dtype(df[cat_coluns[0]]) or not pd.api.types.is_categorical_dtype(df[cat_coluns[1]]):
+        raise Exception('cat_coluns must be categorical')
+    if not pd.api.types.is_numeric_dtype(df[num_column]):
+        raise Exception('num_column must be numeric')
+    
+    config = {
+        'df': df,
+        'num_column_y': num_column,
+        'cat_columns': cat_coluns,
+        'cat_column_x': cat_coluns[0],
+        'cat_column_color': cat_coluns[1],
+        'func': 'sum'
+    }
+    colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
+                        , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
+                        , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
+                        , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2']
+    def prepare_df(config):
+        """
+        Prepare a dataframe for plotting by grouping and aggregating data.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dictionary containing dataframe, numeric column, categorical columns, and aggregation function.
+
+        Returns
+        -------
+        func_df : pandas.DataFrame
+            A dataframe with aggregated data, sorted by the numeric column.
+
+        Notes
+        -----
+        This function groups the dataframe by the categorical columns, applies the aggregation function to the numeric column,
+        and sorts the resulting dataframe by the numeric column in descending order.
+        If a color column is specified, the function unstacks the dataframe and sorts it by the sum of the numeric column.
+        """
+        df = config['df']
+        cat_column_color = [config['cat_column_color']] if config['cat_column_color'] else []
+        cat_columns = [config['cat_column_x']] + cat_column_color  
+        num_column = config['num_column_y']
+        # print(config)
+        # print(cat_columns)
+        # print(num_column)
+        func = config.get('func', 'sum')  # default to 'sum' if not provided
+        if func == 'mode':
+            func = lambda x: x.mode().iloc[0] 
+            func_for_modes = lambda x: tuple(x.mode().to_list())
+        else:
+            func_for_modes = lambda x: ''
+        if func == 'range':
+            func = lambda x: x.max() - x.min()
+        func_df = (df[[*cat_columns, num_column]]
+            .groupby(cat_columns) 
+            .agg(num = (num_column, func), modes = (num_column, func_for_modes)) 
+            .sort_values('num', ascending=False)
+            .rename(columns={'num': num_column})
+        )
+        if config['cat_column_color']:
+            func_df = func_df.unstack(level=1)        
+            func_df['sum'] = func_df.sum(axis=1, numeric_only=True)
+            func_df = func_df.sort_values('sum', ascending=False).drop('sum', axis=1)
+            func_df = pd.concat([func_df[num_column], func_df['modes']], keys=['num', 'modes'])
+            func_df = func_df.sort_values(func_df.index[0], axis=1, ascending=False)
+            return func_df
+        else:
+            return func_df
+    def prepare_data_treemap(df, cat_columns, value_column, func='sum'):
+        """
+        Prepare data for a treemap plot by grouping and aggregating data.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Input dataframe.
+        cat_columns : list
+            List of categorical columns.
+        value_column : str
+            Name of the numeric column.
+        func : str, optional
+            Aggregation function (default is 'sum').
+
+        Returns
+        -------
+        res_df : pandas.DataFrame
+            A dataframe with aggregated data, ready for treemap plotting.
+
+        Notes
+        -----
+        This function groups the dataframe by the categorical columns, applies the aggregation function to the numeric column,
+        and creates a hierarchical structure for the treemap plot.
+        """
+        df_in = df[cat_columns + [value_column]].copy()
+        prefix = 'All/'
+        if func == 'mode':
+            func = lambda x: x.mode().iloc[0] 
+        if func == 'range':
+            func = lambda x: x.max() - x.min()    
+        df_grouped_second_level = df_in[[*cat_columns, value_column]].groupby(cat_columns).agg({value_column: func}).reset_index()
+        df_grouped_second_level['ids'] = df_grouped_second_level[cat_columns].apply(lambda x: f'{prefix}{x[cat_columns[0]]}/{x[cat_columns[1]]}', axis=1)
+        df_grouped_second_level['parents'] = df_grouped_second_level[cat_columns].apply(lambda x: f'{prefix}{x[cat_columns[0]]}', axis=1)
+        df_grouped_second_level = df_grouped_second_level.sort_values(cat_columns[::-1], ascending=False)
+        # df_grouped = df_grouped.drop(cat_columns[0], axis=1)
+        df_grouped_first_level = df_grouped_second_level.groupby(cat_columns[0]).sum().reset_index()
+        df_grouped_first_level['ids'] = df_grouped_first_level[cat_columns[0]].apply(lambda x: f'{prefix}{x}')
+        df_grouped_first_level['parents'] = 'All'
+        df_grouped_first_level = df_grouped_first_level.sort_values(cat_columns[0], ascending=False)
+        all_value = df_grouped_first_level[value_column].sum()
+        res_df = pd.concat([df_grouped_second_level.rename(columns={cat_columns[1]: 'labels', value_column: 'values'}).drop(cat_columns[0], axis=1)
+                            , df_grouped_first_level.rename(columns={cat_columns[0]: 'labels', value_column: 'values'})
+                            , pd.DataFrame({'parents': '', 'labels': 'All',  'values': all_value, 'ids': 'All'}, index=[0])]
+                            , axis=0)
+        return res_df
+    def create_bars_lines_area_figure(config):
+        """
+        Create a figure with bar, line, and area traces based on the provided configuration.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dictionary containing dataframe, numeric column, and categorical columns.
+
+        Returns
+        -------
+        fig : plotly.graph_objects.Figure
+            A figure object containing bar, line, and area traces.
+        """
+        fig = go.Figure()
+        # 1
+        config['cat_column_x'] = config['cat_columns'][0]
+        config['cat_column_color'] = ''    
+        df_for_fig = prepare_df(config)
+        x = df_for_fig.index.tolist()
+        y = df_for_fig[config['num_column_y']].values.tolist()
+        bar_traces = px.bar(x=x
+        , y=y
+        ).data
+        line_traces = px.line(x=x
+        , y=y
+        , markers=True
+        ).data
+        area_traces = px.area(x=x
+        , y=y
+        , markers=True
+        ).data    
+        fig.add_traces(bar_traces + line_traces + area_traces)
+        # 2
+        config['cat_column_x'] = config['cat_columns'][1]
+        config['cat_column_color'] = ''    
+        df_for_fig = prepare_df(config)
+        x = df_for_fig.index.tolist()
+        y = df_for_fig[config['num_column_y']].values.tolist()
+        bar_traces = px.bar(x=x
+        , y=y
+        ).data
+        line_traces = px.line(x=x
+        , y=y
+        , markers=True
+        ).data
+        area_traces = px.area(x=x
+        , y=y
+        , markers=True
+        ).data    
+        fig.add_traces(bar_traces + line_traces + area_traces)
+        # 12
+        config['cat_column_x'] = config['cat_columns'][0]
+        config['cat_column_color'] = config['cat_columns'][1]
+        df_for_fig = prepare_df(config).loc['num', :].stack().reset_index(name=config['num_column_y'])
+        x = df_for_fig[config['cat_column_x']].values.tolist()
+        y = df_for_fig[config['num_column_y']].values.tolist()
+        color = df_for_fig[config['cat_column_color']].values if config['cat_column_color'] else None    
+        bar_traces = px.bar(x=x
+        , y=y
+        , color=color
+        , barmode='group'
+        ).data
+        config['traces_cnt12'] = len(bar_traces)
+        line_traces = px.line(x=x
+        , y=y
+        , color=color
+        , markers=True
+        ).data
+        area_traces = px.area(x=x
+        , y=y
+        , color=color
+        , markers=True
+        ).data    
+        fig.add_traces(bar_traces + line_traces + area_traces)
+
+        # 21
+        config['cat_column_x'] = config['cat_columns'][1]
+        config['cat_column_color'] = config['cat_columns'][0]
+        df_for_fig = prepare_df(config).loc['num', :].stack().reset_index(name=config['num_column_y'])
+        x = df_for_fig[config['cat_column_x']].values.tolist()
+        y = df_for_fig[config['num_column_y']].values.tolist()
+        color = df_for_fig[config['cat_column_color']].values if config['cat_column_color'] else None    
+        bar_traces = px.bar(x=x
+        , y=y
+        , color=color
+        , barmode='group'
+        ).data
+        config['traces_cnt21'] = len(bar_traces)
+        line_traces = px.line(x=x
+        , y=y
+        , color=color
+        , markers=True
+        ).data
+        area_traces = px.area(x=x
+        , y=y
+        , color=color
+        , markers=True
+        ).data    
+        fig.add_traces(bar_traces + line_traces + area_traces)
+        
+
+        for i, trace in enumerate(fig.data):
+            # при старте показываем только первый trace
+            if i:
+                trace.visible = False
+            if trace.type == 'scatter':
+                trace.line.width = 2
+                # trace.marker.size = 7      
+        return fig
+    
+    def create_heatmap_treemap_sankey_figure(config):
+        """
+        Create a figure with heatmap, treemap, and sankey diagrams based on the provided configuration.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dictionary containing dataframe, numeric column, and categorical columns.
+
+        Returns
+        -------
+        fig : plotly.graph_objects.Figure
+            A figure object containing heatmap, treemap, and sankey diagrams.
+        """        
+        fig = go.Figure()
+        
+        # # heatmap
+        pivot_for_heatmap = config['df'].pivot_table(index=config['cat_columns'][0], columns=config['cat_columns'][1], values=config['num_column_y'])
+        heatmap_trace = px.imshow(pivot_for_heatmap, text_auto=".0f").data[0]
+        heatmap_trace.xgap=3
+        heatmap_trace.ygap=3
+        fig.add_trace(heatmap_trace)
+        fig.update_layout(coloraxis=dict(colorscale=[(0, 'rgba(204, 153, 255, 0.1)'), (1, 'rgb(127, 60, 141)')])
+                                                , hoverlabel=dict(bgcolor='white'))
+        # treemap
+        treemap_trace = columns = treemap(config['df'], config['cat_columns'], config['num_column_y']).data[0]
+        fig.add_trace(treemap_trace)
+        
+        # sankey
+        sankey_trace =  sankey(config['df'], config['cat_columns'], config['num_column_y'], func='sum').data[0]
+        fig.add_trace(sankey_trace)
+        for i, trace in enumerate(fig.data):
+        # при старте показываем только первый trace
+            if i:
+                trace.visible = False
+        return fig
+        
+    def create_buttons_bars_lines_ares(config):
+        """
+        Create buttons for updating the layout of a figure with bar, line, and area traces.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dictionary containing dataframe, numeric column, and categorical columns.
+
+        Returns
+        -------
+        buttons : list
+            A list of button objects for updating the layout of a figure.
+        """
+        buttons = []
+        buttons.append(dict(label='Ver', method='restyle', args=[{'orientation': ['v'] * 3 + ['v'] * 3
+                                                + ['v'] * config['traces_cnt12'] * 3
+                                                + ['v'] * config['traces_cnt21'] * 3}
+                                                                ]))
+        buttons.append(dict(label='Hor', method='restyle', args=[{'orientation': ['h'] * 3 + ['h'] * 3
+                                                + ['h'] * config['traces_cnt12'] * 3
+                                                + ['h'] * config['traces_cnt21'] * 3}]))
+        buttons.append(dict(label='stack', method='relayout', args=[{'barmode': 'stack'}]))
+        buttons.append(dict(label='group', method='relayout', args=[{'barmode': 'group'}]))
+        # buttons.append(dict(label='overlay', method='relayout', args=[{'barmode': 'overlay'}]))
+                
+    #    add range, distinct count
+        for i, func in enumerate(['sum', 'mean', 'median', 'count', 'nunique', 'mode', 'std', 'min', 'max', 'range']):
+            config['func'] = func
+            # 12
+            config['cat_column_x'] = config['cat_columns'][0]
+            config['cat_column_color'] = config['cat_columns'][1]
+            df_for_update = prepare_df(config)
+            df_num12 = df_for_update.loc['num', :]
+            x_12 = df_num12.index.tolist()
+            y_12 = df_num12.values.T.tolist()
+            name_12 = df_num12.columns.tolist()
+            modes_array12 = df_for_update.loc['modes', :].fillna('').values.T
+            if func == 'mode':
+                text_12 = [[', '.join(map(str, col)) if col else '' for col in row] for row in modes_array12]
+                colors = [['orange' if len(col) > 1 else colorway_for_bar[i] for col in row] for i, row in enumerate(modes_array12)]
+                colors12 = [{'color': col_list} for col_list in colors]
+            else:
+                text_12 = [['' for col in row] for row in modes_array12]
+                colors = [[colorway_for_bar[i] for col in row] for i, row in enumerate(modes_array12)]
+                colors12 = [{'color': col_list} for col_list in colors]
+
+            # 21
+            config['cat_column_x'] = config['cat_columns'][1]
+            config['cat_column_color'] = config['cat_columns'][0]
+            df_for_update = prepare_df(config)
+            df_num21 = df_for_update.loc['num', :]
+            x_21 = df_num21.index.tolist()
+            y_21 = df_num21.values.T.tolist()
+            name_21 = df_num21.columns.tolist()
+            modes_array21 = df_for_update.loc['modes', :].fillna('').values.T
+            if func == 'mode':
+                text_21 = [[', '.join(map(str, col)) if col else '' for col in row] for row in modes_array21]
+                colors = [['orange' if len(col) > 1 else colorway_for_bar[i] for col in row] for i, row in enumerate(modes_array21)]
+                colors21 = [{'color': col_list} for col_list in colors]          
+            else:
+                text_21 = [[''for col in row] for row in modes_array21]
+                colors = [[colorway_for_bar[i] for col in row] for i, row in enumerate(modes_array21)]
+                colors21 = [{'color': col_list} for col_list in colors]    
+            # 1
+            config['cat_column_x'] = config['cat_columns'][0]
+            config['cat_column_color'] = ''    
+            df_for_update = prepare_df(config)
+            x_1 = df_for_update.index.tolist()
+            y_1 = df_for_update[config['num_column_y']].values.tolist()
+            modes_array1 = df_for_update['modes'].to_list()
+            if func == 'mode':  
+                text_1 = [[', '.join(map(str,x)) for x in modes_array1]]
+                colors_1 =[{'color': ['orange' if len(x) > 1 else colorway_for_bar[0] for x in modes_array1]}]
+            else:
+                text_1 = ['']
+                colors_1 =[{'color': [colorway_for_bar[0] for x in modes_array1]}]
+            # 2
+            config['cat_column_x'] = config['cat_columns'][1]
+            config['cat_column_color'] = ''    
+            df_for_update = prepare_df(config)
+            x_2 = df_for_update.index.tolist()
+            y_2 = df_for_update[config['num_column_y']].values.tolist()  
+            modes_array2 = df_for_update['modes'].to_list()
+            if func == 'mode': 
+                text_2 = [[', '.join(map(str,x)) for x in modes_array2]]
+                colors_2 = [{'color': ['orange' if len(x) > 1 else colorway_for_bar[0] for x in modes_array2]}]   
+            else:
+                text_2 = ['']
+                colors_2 = [{'color': [colorway_for_bar[0] for x in modes_array2]}]  
+            
+            args=[{
+                'orientation': ['v'] * 3 + ['v'] * 3
+                        + ['v'] * config['traces_cnt12'] * 3
+                        + ['v'] * config['traces_cnt21'] * 3
+                # для каждго trace должент быть свой x, поэтому x умножаем на количество trace
+                , 'x': [x_1] * 3 + [x_2] * 3
+                        + [x_12] * config['traces_cnt12'] * 3
+                        + [x_21] * config['traces_cnt21'] * 3
+                # для y1 и y2 нужно обренуть в список
+                , 'y': [y_1] * 3 + [y_2] * 3 + y_12 * 3 +  y_21 * 3
+
+                # для 1 и 2 нет цветов, поэтому названия делаем пустыми
+                , 'name': [''] * 3 + [''] * 3 + name_12 * 3 +  name_21 * 3 + [''] + [''] + ['']
+
+                , 'text': text_1 * 3 + text_2 * 3 + text_12 * 3 + text_21 * 3 
+                , 'marker': colors_1 * 3 + colors_2 * 3 + colors12 * 3 + colors21 * 3 
+                , 'textposition': 'none'
+                , 'textfont': {'color': 'black'}
+                }, {'title': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"
+                    , 'updatemenus[0].active': 0}                                  
+            ]
+            if func == 'mode': 
+                args[0]['hovertemplate'] = ['x=%{x}<br>y=%{y}<br>modes=%{text}'] * 6 \
+                            + ['x=%{x}<br>y=%{y}<br>color=%{data.name}<br>modes=%{text}'] * (config['traces_cnt12'] + config['traces_cnt21']) * 3
+            else:
+                args[0]['hovertemplate'] = ['x=%{x}<br>y=%{y}'] * 6 \
+                            + ['x=%{x}<br>y=%{y}<br>color=%{data.name}'] * (config['traces_cnt12'] + config['traces_cnt21']) * 3
+            
+            buttons.append(dict(label=f'{func.capitalize()}'
+                                , method='update'
+                                # , args2=[{'orientation': 'h'}, {'title': f"{func} &nbsp;&nbsp;&nbsp;&nbsp;num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"}]
+                                , args=args))
 
 
+        traces_visible = {'1b': [[False]], '1l': [[False]], '1a': [[False]], '2b': [[False]], '2l': [[False]], '2a': [[False]]
+            , '12b': [[False] * config['traces_cnt12']], '12l': [[False] * config['traces_cnt12']], '12a': [[False] * config['traces_cnt12']]
+            , '21b': [[False] * config['traces_cnt21']], '21l': [[False] * config['traces_cnt21']], '21a': [[False] * config['traces_cnt21']]
+            }
+        traces_visible_df = pd.DataFrame(traces_visible)
+        traces_lables_bar = {'1b': '1', '2b': '2', '12b': '12', '21b': '21'}
+        traces_lables_line = {'1l': '1', '2l': '2', '12l': '12', '21l': '21'}
+        traces_lables_area = {'1a': '1', '2a': '2', '12a': '12', '21a': '21'}
+        traces_lables = {**traces_lables_bar, **traces_lables_line, **traces_lables_area}
+        for button_label in traces_lables:
+            traces_visible_df_copy = traces_visible_df.copy()
+            traces_visible_df_copy[button_label] = traces_visible_df_copy[button_label].apply(lambda x: [True for _ in x])
+            visible_mask = [val for l in traces_visible_df_copy.loc[0].values for val in l]
+            data = {'visible': visible_mask, 'xaxis': {'visible': False}, 'yaxis': {'visible': False}}
+            visible = True if button_label in list(traces_lables_bar.keys()) else False
+            buttons.append(dict(label=traces_lables[button_label], method='restyle', args=[data], visible=visible))
+        
+        buttons.append(dict(
+            label='Bar',
+            method='relayout',
+            args=[{**{f'updatemenus[2].buttons[{i}].visible': True for i in range(4)}, **{f'updatemenus[2].buttons[{i}].visible': False for i in range(4, 12)}}]
+        ))
+        buttons.append(dict(
+            label='Line',
+            method='relayout',
+            args=[{**{f'updatemenus[2].buttons[{i}].visible': False for i in list(range(4)) + list(range(8, 12))}, **{f'updatemenus[2].buttons[{i}].visible': True for i in range(4, 8)}}]
+        )) 
+        buttons.append(dict(
+            label='Area',
+            method='relayout',
+            args=[{**{f'updatemenus[2].buttons[{i}].visible': False for i in range(8)}, **{f'updatemenus[2].buttons[{i}].visible': True for i in range(8, 12)}}]
+        ))        
+    
+        
+        return buttons
 
-# =========================================================================================
-# =========================================================================================
-# =========================================================================================
-# def prepare_df(config):
-#     df = config['df']
-#     cat_column = config['cat_column']
-#     num_column = config['num_column']
-#     func = config.get('func', 'sum')  # default to 'sum' if not provided
-#     if func == 'mode':
-#         # Обработка случая для моды
-#         func = lambda x: x.mode().iloc[0] 
-#         return df[[cat_column, num_column]]\
-#             .groupby(cat_column) \
-#             .agg(num = (num_column, func), modes = (num_column, lambda x: x.mode().to_list())) \
-#             .reset_index() \
-#             .sort_values('num', ascending=False).rename(columns={'num': num_column})
-#     else:
-#         return df[[cat_column, num_column]] \
-#             .groupby(cat_column) \
-#             .agg(num = (num_column, func), modes = (num_column, lambda x: '')) \
-#             .reset_index() \
-#             .sort_values('num', ascending=False).rename(columns={'num': num_column})
 
-# def create_figure(config):
-#     df_for_fig = prepare_df(config)
-#     x = df_for_fig[config['cat_column']]
-#     y = df_for_fig[config['num_column']]
+    def update_layout_bars_lines_ares(fig, buttons):
+        """
+        Update the layout of a figure with bar, line, and area traces based on the provided buttons.
 
-#     bar_fig = go.Bar(x=x, y=y, name='')
-#     line_fig = go.Scatter(x=x, y=y, mode='lines', visible=False, name='')
-#     area_fig = go.Scatter(x=x, y=y, mode='lines', fill='tozeroy', visible=False, name='')
-#     return go.Figure(data=[bar_fig, line_fig, area_fig])
+        Parameters
+        ----------
+        fig : plotly.graph_objects.Figure
+            A figure object containing bar, line, and area traces.
+        buttons : list
+            A list of button objects for updating the layout of a figure.
+        """
+        fig.update_layout(
+            updatemenus=[
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=buttons[:4],  # first 3 buttons (Bar, Line, Area)
+                    pad={"r": 10, "t": 70},
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=1.05,
+                    yanchor="bottom"
+                ),        
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=buttons[4:14],  # first 3 buttons (Bar, Line, Area)
+                    pad={"l": 240, "r": 10, "t": 70},
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=1.05,
+                    yanchor="bottom"
+                ),                 
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=buttons[14:26],  # first 3 buttons (Bar, Line, Area)
+                    pad={"r": 10, "t": 70},
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=1.2,
+                    yanchor="bottom"
+                ),          
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=buttons[26:],  # first 3 buttons (Bar, Line, Area)
+                    pad={"l": 180, "r": 10, "t": 70},
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=1.2,
+                    yanchor="bottom"
+                ),                                                                                                            
+            ]
+        )
+        
+        
+    def create_buttons_heatmap_treemap_sankey(config):
+        """
+        Create buttons for updating the layout of a figure with heatmap, treemap, and sankey diagrams.
 
-# def create_buttons(config):
-#     buttons = []
-#     # print(len(fig.data))
-#     # print(fig['layout']['yaxis']['orientation'])
-#         # orientation = fig['layout']['yaxis']['orientation'] if fig['layout']['yaxis']['orientation'] in ['v', 'h'] else fig['layout']['xaxis']['orientation']
-#     df, cat_column, num_column = config['df'], config['cat_column'], config['num_column']
-#     buttons.append(dict(label='Ver', method='update', args=[{'orientation': 'v'}]))
-#     buttons.append(dict(label='Hor', method='update', args=[{'orientation': 'h'}]))
-#     buttons.append(dict(label='Bar', method='update', args=[{'visible': [True, False, False]}]))
-#     buttons.append(dict(label='Line', method='update', args=[{'visible': [False, True, False]}]))
-#     buttons.append(dict(label='Area', method='update', args=[{'visible': [False, False, True]}]))
-#     for func in ['sum', 'mean', 'median', 'count', 'mode', 'std', 'min', 'max']:
-#         config['func'] = func
-#         if func == 'mode':
-#             buttons.append(dict(label=f'Agg {func.capitalize()}'
-#                                 , method='update'
-#                                 , args=[{
-#                                     'orientation': 'v'
-#                                     , 'x': [prepare_df(config)[cat_column].to_list()] 
-#                                     , 'y': [prepare_df(config)[num_column].to_list()] 
-#                                 # , args=[{'x': [prepare_df(config)[cat_column].to_list()] 
-#                                 #             if any([fig.data[i]['orientation'] == 'v' for i in range(len(fig.data))]) 
-#                                 #             else [prepare_df(config)[num_column].to_list()]
-#                                 #         , 'y': [prepare_df(config)[num_column].to_list()] 
-#                                 #             if any([fig.data[i]['orientation'] == 'v' for i in range(len(fig.data))]) 
-#                                 #             else [prepare_df(config)[cat_column].to_list()]
-#                                         # , 'text': [[', '.join(map(str,x)) for x in prepare_df(config)['modes'].to_list()]]
-#                                         # , 'hovertemplate': '<br>Value: %{y:.2f}<br>Modes: %{text}'
-#                                         # , 'marker': {'color': ['#049CB3' if len(x) > 1 else 'rgba(128, 60, 170, 0.9)' for x in prepare_df(config)['modes'].to_list()]}
-#                                         # , 'textposition': 'none'
-#                                         # , 'textposition': 'auto'
-#                                         # , 'textfont': {'color': 'black'}
-#                                         }]))
-#         else:
-#             buttons.append(dict(label=f'Agg {func.capitalize()}'
-#                                 , method='update'
-#                                 , args=[{
-#                                     'orientation': 'v'
-#                                     , 'x': [prepare_df(config)[cat_column].to_list()] 
-#                                     , 'y': [prepare_df(config)[num_column].to_list()] 
-#                                         #  'x': [prepare_df(config)[cat_column].to_list()] 
-#                                         # , 'y': [prepare_df(config)[num_column].to_list()]    
-#                                         # , 'text': ['']
-#                                         # , 'hovertemplate': '<br>Value: %{y:.2f}'
-#                                         # , 'marker': {'color': ['rgba(128, 60, 170, 0.9)' for x in prepare_df(config)['modes'].to_list()]}
-#                                         # , 'textposition': 'none'
-#                                         # , 'textposition': 'auto'
-#                                         # , 'textfont': {'color': 'black'}
-#                                         }]))
-#     return buttons
+        Parameters
+        ----------
+        config : dict
+            Configuration dictionary containing dataframe, numeric column, and categorical columns.
 
-# def update_layout(fig, buttons):
-#     fig.update_layout(
-#         updatemenus=[
-#             dict(
-#                 type="buttons",
-#                 direction="left",
-#                 buttons=buttons[:2],  # first 3 buttons (Bar, Line, Area)
-#                 pad={"r": 10, "t": 70},
-#                 showactive=True,
-#                 x=0,
-#                 xanchor="left",
-#                 y=1.1,
-#                 yanchor="bottom"
-#             ),            
-#             dict(
-#                 type="buttons",
-#                 direction="left",
-#                 buttons=buttons[2:5],  # first 3 buttons (Bar, Line, Area)
-#                 pad={"l": 120, "r": 10, "t": 70},
-#                 showactive=True,
-#                 x=0,
-#                 xanchor="left",
-#                 y=1.1,
-#                 yanchor="bottom"
-#             ),
-#             dict(
-#                 type="buttons",
-#                 direction="left",
-#                 buttons=buttons[5:],  # remaining buttons (Agg functions)
-#                 pad={"l": 300, "r": 10, "t": 70},  # add left padding to separate from previous group
-#                 showactive=True,
-#                 x=0,
-#                 xanchor="left",pad
-#                 y=1.1,
-#                 yanchor="bottom"
-#             ),
-#         ]
-#     )
+        Returns
+        -------
+        buttons : list
+            A list of button objects for updating the layout of a figure.
+        """   
+        buttons = []
+        buttons.append(dict(label='Ver', method='restyle', args=[{'orientation': ['v'] + ['v'] + ['h']}]))
+        buttons.append(dict(label='Hor', method='restyle', args=[{'orientation': ['h'] + ['h'] + ['h']}]))
+        # buttons.append(dict(label='overlay', method='relayout', args=[{'barmode': 'overlay'}]))
+            
+        buttons.append(dict(label='heatmap', method='update', args=[{'visible': [True, False, False]}
+                                                                    , {'xaxis': {'visible': True}, 'yaxis': {'visible': True}}]))
+        buttons.append(dict(label='treemap', method='update', args=[{'visible': [False, True, False]}
+                                                                    , {'xaxis': {'visible': False}, 'yaxis': {'visible': False}}]))
+        buttons.append(dict(label='sankey', method='update', args=[{'visible': [False, False, True]}
+                                                                    , {'xaxis': {'visible': False}, 'yaxis': {'visible': False}}]))        
+    #    add range, distinct count
+        for i, func in enumerate(['sum', 'count', 'nunique']):
+            config['func'] = func
+                        
+            # heatmap       
+            pivot_for_heatmap = config['df'].pivot_table(index=config['cat_columns'][0], columns=config['cat_columns'][1], values=config['num_column_y'], aggfunc=func)            
+            x_heatmap = pivot_for_heatmap.index.tolist()
+            y_heatmap = pivot_for_heatmap.columns.tolist()
+            z_heatmap = pivot_for_heatmap.values
+            if i % 2 == 0:
+                    z_heatmap = z_heatmap.T  
+            # treemap
+            df_treemap = prepare_data_treemap(config['df'], config['cat_columns'], config['num_column_y'], func)
+            treemap_ids = df_treemap['ids'].to_numpy()
+            treemap_parents = df_treemap['parents'].to_numpy()
+            treemap_labels = df_treemap['labels'].to_numpy()
+            treemap_values = df_treemap['values'].to_numpy()
+            
+            # sankey
+            sankey_dict = sankey(config['df'], config['cat_columns'], config['num_column_y'], func, mode='data')
+            sankey_df = sankey_dict['sankey_df'] 
+            nodes_with_indexes = sankey_dict['nodes_with_indexes'] 
+            node_colors = sankey_dict['node_colors']
+            link_color = sankey_dict['link_color']
+            link = dict(
+                        source = sankey_df['source'],
+                        target = sankey_df['target'],
+                        value  = sankey_df['value'],
+                        label = sankey_df['value_percent'],
+                        color = link_color
+                    )         
+            sankey_labels = list(nodes_with_indexes.keys())   
+        
+            buttons.append(dict(label=f'{func.capitalize()}'
+                                , method='update'
+                                , args2=[{'orientation': 'h'}] #, {'title': f"{func} &nbsp;&nbsp;&nbsp;&nbsp;num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"}]
 
-# config = {
-#     'df': df,
-#     'cat_column': 'education',
-#     'num_column': 'dob_years',
-#     'func': 'sum'
-# }
+                                , args=[{
+                                    'orientation': 'h'
+                                    , 'x': [x_heatmap] + [None] + [None]
+                                    # для y1 и y2 нужно обренуть в список
+                                    , 'y': [y_heatmap] + [None] + [None]
+                                    # , 'z': [z_heatmap]
+                                    # , 'orientation': 'v'
+                                    , 'z': [z_heatmap] + [None] + [None]
+                                    # treemap
+                                    , 'ids': [None] + [treemap_ids] + [None]
+                                    , 'labels': [None] + [treemap_labels] + [None]
+                                    , 'parents': [None] + [treemap_parents] + [None]
+                                    , 'values': [None] + [treemap_values] + [None] 
+                                    # sankey
+                                    , 'label': [None] + [None] + [sankey_labels]
+                                    , 'color':[None] + [None] + [node_colors]
+                                    , 'link': [None] + [None] + [link]                
+                                    # , 'layout.annotations': annotations
+                                    # для 1 и 2 нет цветов, поэтому названия делаем пустыми
+                                    , 'hovertemplate':  ['x=%{x}<br>y=%{y}<br>z=%{z:.0f}']
+                                                        + ['%{label}<br>%{value}'] + [None]}
+                                    , {'title': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"
+                                        , 'updatemenus[0].active': 0}
+                                ]))     
 
-# fig = create_figure(config)
-# buttons = create_buttons(config)
-# update_layout(fig, buttons)
-# fig.update_layout(height = 500
-#                 #  , title={'text': f"{config['num_column']}<br>{'cat_column'}", 'y': 0.9}
-#                   , xaxis={'title': config['cat_column']}
-#                   , yaxis={'title': config['num_column']})
-# fig.show(config=dict(displayModeBar=True))
+
+        buttons.append(dict(
+            label='Small',
+            method='relayout',
+            args=[{'height': 600}],
+            args2=[{'height': 800}]
+        )) 
+    
+        return buttons
+
+    def update_layout_heatmap_treemap_sankey(fig, buttons):
+        """
+        Update the layout of a figure with heatmap, treemap, and sankey diagrams based on the provided buttons.
+
+        Parameters
+        ----------
+        fig : plotly.graph_objects.Figure
+            A figure object containing heatmap, treemap, and sankey diagrams.
+        buttons : list
+            A list of button objects for updating the layout of a figure.
+        """
+        fig.update_layout(
+            updatemenus=[
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=buttons[:2],  # first 3 buttons (Bar, Line, Area)
+                    pad={"r": 10, "t": 70},
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=1.05,
+                    yanchor="bottom"
+                ),        
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=buttons[2:5],  # first 3 buttons (Bar, Line, Area)
+                    pad={"l": 120, "r": 10, "t": 70},
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=1.05,
+                    yanchor="bottom"
+                ),                 
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=buttons[5:8],  # first 3 buttons (Bar, Line, Area)
+                    pad={"l": 380,"r": 10, "t": 70},
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=1.05,
+                    yanchor="bottom"
+                ),          
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=[buttons[8]],  # first 3 buttons (Bar, Line, Area)
+                    pad={"l": 600, "r": 10, "t": 70},
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=1.05,
+                    yanchor="bottom"
+                ),                                                                                                                   
+            ]
+        )
+
+    fig = create_bars_lines_area_figure(config)
+    buttons = create_buttons_bars_lines_ares(config)
+    update_layout_bars_lines_ares(fig, buttons)
+    fig.update_layout(height = 600
+                    , title={'text': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}", 'y': 0.92}
+                    , xaxis={'title': None}
+                    , yaxis={'title': None}
+                    #   , margin=dict(l=50, r=50, b=50, t=70),
+                    )
+    fig.show()
+
+    fig = create_heatmap_treemap_sankey_figure(config)
+    buttons = create_buttons_heatmap_treemap_sankey(config)
+    update_layout_heatmap_treemap_sankey(fig, buttons)
+
+    fig.update_layout(height = 600
+                    , title={'text': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}", 'y': 0.92}
+                    , xaxis={'title': None}
+                    , yaxis={'title': None}
+                    #   , margin=dict(l=50, r=50, b=50, t=70),
+                    )
+    fig.show()
+    
+    
+    
+
+
