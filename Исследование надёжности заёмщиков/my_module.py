@@ -20,6 +20,8 @@ import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
 import statsmodels.stats.api as stm
+from termcolor import colored
+import scipy.stats as stats
 
 colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4'
@@ -3072,7 +3074,408 @@ def graph_analysis(df, cat_coluns, num_column):
                     )
     fig.show()
     
+# Хи-квадрат Пирсона
+# Не чувствителен к гетероскедастичности (неравномерной дисперсии) данных.    
+def chi2_pearson(column1: pd.Series, column2: pd.Series, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform Pearson's chi-squared test for independence between two categorical variables.
+
+    Parameters:
+    - column1 (pd.Series): First categorical variable
+    - column2 (pd.Series): Second categorical variable
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (chi2, p_value, dof, expected) instead of printing (default=False).
     
+    Returns:
+    - If return_results is False: 
+    None
+    - If return_results is True
+        - chi2 : (float) 
+            The test statistic.
+        - p : (float) 
+            The p-value of the test
+        - dof : (int)
+            Degrees of freedom
+        - expected : (ndarray, same shape as observed)
+            The expected frequencies, based on the marginal sums of the table.
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if column1.isna().sum() or column2.isna().sum():
+        raise ValueError(f'column1 and column2 must not have missing values.\ncolumn1 have {column1.isna().sum()} missing values\ncolumn2 have {column2.isna().sum()} missing values')
+    crosstab_for_fisher_exact = pd.crosstab(column1, column2)
+    chi2, p_value, dof, expected = stats.chi2_contingency(crosstab_for_fisher_exact)
+ 
+    if not return_results:
+        print('Хи-квадрат Пирсона')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return chi2, p_value, dof, expected
+    
+def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+    """
+    Perform Welch's t-test for independent samples.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns,
+        where the first column contains sample labels (e.g., "male" and "female") and
+        the second column contains corresponding values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float or array)
+            The calculated t-statistic.
+        - pvalue : (float or array)
+            The two-tailed p-value.
+    """ 
+    if alternative not in ['two-sided', 'less', 'greater']:
+        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")    
+    sample_column = df.iloc[:, 0]
+    value_column = df.iloc[:, 1]
+    if not pd.api.types.is_numeric_dtype(value_column):
+        raise ValueError("Value column must contain numeric values")    
+    if sample_column.isna().sum() or value_column.isna().sum():
+        raise ValueError(f'sample_column and value_column must not have missing values.\nsample_column have {sample_column.isna().sum()} missing values\nvalue_column have {value_column.isna().sum()} missing values')
+    unique_samples = sample_column.unique()
+    if len(unique_samples) != 2:
+        raise ValueError("Sample column must contain exactly two unique labels")
+
+    sample1_values = value_column[sample_column == unique_samples[0]]
+    sample2_values = value_column[sample_column == unique_samples[1]]
+    statistic, p_value = stats.ttest_ind(sample1_values, sample2_values, equal_var=False, alternative=alternative)
+    
+    if not return_results:
+        print('T-критерий Уэлча')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value
+      
+def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+    """
+    Perform Welch's t-test for independent samples.
+
+    Parameters:
+    - sample1 (pd.Series): First sample values
+    - sample2 (pd.Series): Second sample values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float or array)
+            The calculated t-statistic.
+        - pvalue : (float or array)
+            The two-tailed p-value.
+    """ 
+    if alternative not in ['two-sided', 'less', 'greater']:
+        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not pd.api.types.is_numeric_dtype(sample1) or not pd.api.types.is_numeric_dtype(sample2):
+        raise ValueError("sample1 and sample2 must contain numeric values")    
+    if sample1.isna().sum() or sample2.isna().sum():
+        raise ValueError(f'sample1 and sample2 must not have missing values.\nsample1 have {sample1.isna().sum()} missing values\nsample2 have {sample2.isna().sum()} missing values')
+    statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=False, alternative=alternative)
     
 
+    if not return_results:
+        print('T-критерий Уэлча')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value
+    
+def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+    """
+    Perform the Mann-Whitney U rank test on two independent samples.
 
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns,
+        where the first column contains sample labels (e.g., "male" and "female") and
+        the second column contains corresponding values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The Mann-Whitney U statistic corresponding with sample x. See Notes for the test statistic corresponding with sample y.
+        - pvalue : (float)
+            The associated *p*-value for the chosen alternative.
+    """ 
+    if alternative not in ['two-sided', 'less', 'greater']:
+        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")    
+    sample_column = df.iloc[:, 0]
+    value_column = df.iloc[:, 1]
+    if not pd.api.types.is_numeric_dtype(value_column):
+        raise ValueError("Value column must contain numeric values")    
+    if sample_column.isna().sum() or value_column.isna().sum():
+        raise ValueError(f'sample_column and value_column must not have missing values.\nsample_column have {sample_column.isna().sum()} missing values\nvalue_column have {value_column.isna().sum()} missing values')
+    unique_samples = sample_column.unique()
+    if len(unique_samples) != 2:
+        raise ValueError("Sample column must contain exactly two unique labels")
+
+    sample1_values = value_column[sample_column == unique_samples[0]]
+    sample2_values = value_column[sample_column == unique_samples[1]]
+    statistic, p_value = stats.mannwhitneyu(sample1_values, sample2_values, alternative=alternative)
+    
+    if not return_results:
+        print('U-критерий Манна-Уитни')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value
+    
+def mannwhitneyu(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+    """
+    Perform the Mann-Whitney U rank test on two independent samples.
+
+    Parameters:
+    - sample1 (pd.Series): First sample values
+    - sample2 (pd.Series): Second sample values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The Mann-Whitney U statistic corresponding with sample x. See Notes for the test statistic corresponding with sample y.
+        - pvalue : (float)
+            The associated *p*-value for the chosen alternative.
+    """ 
+    if alternative not in ['two-sided', 'less', 'greater']:
+        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not pd.api.types.is_numeric_dtype(sample1) or not pd.api.types.is_numeric_dtype(sample2):
+        raise ValueError("sample1 and sample2 must contain numeric values")    
+    if sample1.isna().sum() or sample2.isna().sum():
+        raise ValueError(f'sample1 and sample2 must not have missing values.\nsample1 have {sample1.isna().sum()} missing values\nsample2 have {sample2.isna().sum()} missing values')
+    statistic, p_value = stats.mannwhitneyu(sample1, sample2, alternative=alternative)
+    
+    if not return_results:
+        print('U-критерий Манна-Уитни')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value
+    
+def proportions_ztest(count1: int, count2: int, n1: int, n2: int, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+    """
+    Perform a z-test for proportions.
+
+    Parameters:
+    - count1 (int): Number of successes in the first sample
+    - count2 (int): Number of successes in the second sample
+    - n1 (int): Total number of observations in the first sample
+    - n2 (int): Total number of observations in the second sample
+    - alpha (float, optional): Significance level (default: 0.05)
+    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - return_results (bool, optional): Return (z_stat, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - zstat : (float)
+            test statistic for the z-test
+        - p-value : (float)
+            p-value for the z-test
+    """
+    if alternative not in ['two-sided', 'less', 'greater']:
+        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if not all(isinstance(x, int) for x in [count1, count2, n1, n2]):
+        raise ValueError("All input parameters must be integers")
+    count = [count1, count2]
+    nobs = [n1, n2]
+    z_stat, p_value = stm.proportions_ztest(count=count, nobs=nobs, alternative=alternative)
+    
+    if not return_results:
+        print('Z тест для долей')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return z_stat, p_value
+        
+def proportions_ztest_column(column: pd.Series, alpha: float=0.05, alternative: str='two-sided', return_results: bool = False):
+    """
+    Perform a z-test for proportions on a single column.
+
+    Parameters:
+    - column (pandas Series): The input column with two unique values.
+    - alpha (float, optional): The significance level (default=0.05).
+    - alternative (str, optional): The alternative hypothesis (default='two-sided').
+    - return_results (bool, optional): Return (z_stat, p_value) instead of printing (default=False).
+    
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - zstat : (float)
+            test statistic for the z-test
+        - p-value : (float)
+            p-value for the z-test
+    """
+    if alternative not in ['two-sided', 'less', 'greater']:
+        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if column.isna().sum():
+        raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
+
+    if column.unique().size != 2:
+        raise Exception(f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
+
+    value_counts = column.value_counts()
+    count1 = value_counts.values[0]
+    count2 = value_counts.values[1]
+    n1 = n2 = column.size
+    count = [count1, count2]
+    nobs = [n1, n2]
+
+    z_stat, p_value = stm.proportions_ztest(count=count, nobs=nobs, alternative=alternative)
+    if not return_results:
+        print('Z тест для долей')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return z_stat, p_value                                               
+    
+def proportions_chi2(count1: int, count2: int, n1: int, n2: int, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+    """
+    Perform a chi-squared test for proportions.
+
+    Parameters:
+    - count1 (int): Number of successes in the first sample
+    - count2 (int): Number of successes in the second sample
+    - n1 (int): Total number of observations in the first sample
+    - n2 (int): Total number of observations in the second sample
+    - alpha (float, optional): Significance level (default: 0.05)
+    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - return_results (bool, optional): Return (chi2_stat, p_value) instead of printing (default=False)
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - chi2_stat : (float)
+            test statistic for the chi-squared test, asymptotically chi-squared distributed
+        - p-value : (float)
+            p-value for the chi-squared test
+    """
+    if alternative not in ['two-sided', 'less', 'greater']:
+        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if not all(isinstance(x, int) for x in [count1, count2, n1, n2]):
+        raise ValueError("All input parameters must be integers")
+    
+    chi2_stat, p_value = stm.test_proportions_2indep(count1, n1, count2, n2, alternative=alternative).tuple 
+    
+    if not return_results:
+        print('Хи-квадрат тест для долей')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return chi2_stat, p_value
+
+def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: str='two-sided', return_results: bool = False):
+    """
+    Perform a chi-squared test for proportions on a single column.
+
+    Parameters:
+    - column (pandas Series): The input column with two unique values.
+    - alpha (float, optional): The significance level (default=0.05).
+    - alternative (str, optional): The alternative hypothesis (default='two-sided').
+    - return_results (bool, optional): Return (chi2_stat, p_value) instead of printing (default=False).
+    
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - chi2_stat : (float)
+            test statistic for the chi-squared test, asymptotically chi-squared distributed
+        - p-value : (float)
+            p-value for the chi-squared test
+    """
+    if alternative not in ['two-sided', 'less', 'greater']:
+        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if column.isna().sum():
+        raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
+
+    if column.unique().size != 2:
+        raise Exception(f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
+
+    value_counts = column.value_counts()
+    count1 = value_counts.values[0]
+    count2 = value_counts.values[1]
+    n1 = n2 = column.size
+
+    chi2_stat, p_value = stm.test_proportions_2indep(count1, n1, count2, n2, alternative=alternative).tuple 
+    
+    if not return_results:
+        print('Хи-квадрат тест для долей')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return chi2_stat, p_value
+    
+    
+    
+    
