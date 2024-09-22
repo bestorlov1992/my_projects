@@ -20,8 +20,11 @@ import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
 import statsmodels.stats.api as stm
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from termcolor import colored
 import scipy.stats as stats
+import pingouin as pg
+import warnings
 
 colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4'
@@ -3073,10 +3076,46 @@ def graph_analysis(df, cat_coluns, num_column):
                     #   , margin=dict(l=50, r=50, b=50, t=70),
                     )
     fig.show()
+
+def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series) -> float:
+    """
+    Calculate Cohen's d from two independent samples.  
+    Cohen's d is a measure of effect size used to quantify the standardized difference between the means of two groups.
+
+    Parameters:
+    sample1 (pd.Series): First sample
+    sample2 (pd.Series): Second sample
+
+    Returns:
+    float: Cohen's d
+    """
+    # Check if inputs are pd.Series
+    if not isinstance(sample1, pd.Series) or not isinstance(sample2, pd.Series):
+        raise ValueError("Both inputs must be pd.Series")
+
+    # Check if samples are not empty
+    if sample1.empty or sample2.empty:
+        raise ValueError("Both samples must be non-empty")
+
+    # Calculate means and variances
+    mean1, var1 = sample1.mean(), sample1.var()
+    mean2, var2 = sample2.mean(), sample2.var()
+
+    # Calculate sample sizes
+    nobs1 = len(sample1)
+    nobs2 = len(sample2)
+
+    # Calculate pooled standard deviation
+    pooled_std = np.sqrt(((nobs1 - 1) * var1 + (nobs2 - 1) * var2) / (nobs1 + nobs2 - 2))
+
+    # Calculate Cohen's d
+    cohens_d = (mean1 - mean2) / pooled_std
+
+    return cohens_d    
     
 # Хи-квадрат Пирсона
 # Не чувствителен к гетероскедастичности (неравномерной дисперсии) данных.    
-def chi2_pearson(column1: pd.Series, column2: pd.Series, alpha: float = 0.05, return_results: bool = False) -> None:
+def chi2_pearson(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform Pearson's chi-squared test for independence between two categorical variables.
 
@@ -3101,10 +3140,16 @@ def chi2_pearson(column1: pd.Series, column2: pd.Series, alpha: float = 0.05, re
     """
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
-    if column1.isna().sum() or column2.isna().sum():
-        raise ValueError(f'column1 and column2 must not have missing values.\ncolumn1 have {column1.isna().sum()} missing values\ncolumn2 have {column2.isna().sum()} missing values')
-    crosstab_for_fisher_exact = pd.crosstab(column1, column2)
-    chi2, p_value, dof, expected = stats.chi2_contingency(crosstab_for_fisher_exact)
+    if not all(isinstance(sample, pd.Series) for sample in [sample1, sample2]):
+        raise ValueError("Input samples must be pd.Series")      
+    if not all(len(sample) > 0 for sample in [sample1, sample2]):
+        raise ValueError("All samples must have at least one value")   
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if sample1.isna().sum() or sample2.isna().sum():
+        raise ValueError(f'column1 and column2 must not have missing values.\ncolumn1 have {sample1.isna().sum()} missing values\ncolumn2 have {sample2.isna().sum()} missing values')
+    crosstab_for_chi2_pearson = pd.crosstab(sample1, sample2)
+    chi2, p_value, dof, expected = stats.chi2_contingency(crosstab_for_chi2_pearson)
  
     if not return_results:
         print('Хи-квадрат Пирсона')
@@ -3126,8 +3171,8 @@ def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-
         where the first column contains sample labels (e.g., "male" and "female") and
         the second column contains corresponding values
     - alpha (float, optional): Significance level (default: 0.05)
-    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
-    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+    - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
+    - return_results (bool, optional): Return (statistic, p_value, beta, cohens_d) instead of printing (default=False).
 
     Returns:
     - If return_results is False: None
@@ -3136,13 +3181,29 @@ def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-
             The calculated t-statistic.
         - pvalue : (float or array)
             The two-tailed p-value.
+        - beta : (float)
+            The probability of Type II error (beta).
+        - cohens_d : (float)
+            The effect size (Cohen's d).
     """ 
-    if alternative not in ['two-sided', 'less', 'greater']:
-        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "greater",
+        "l": "greater",
+        "smaller": "less",
+        "s": "less"
+    }
+    alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input df must be pd.DataFrame")          
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")    
+        raise ValueError("Input DataFrame must have exactly two columns")            
+    
     sample_column = df.iloc[:, 0]
     value_column = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(value_column):
@@ -3153,20 +3214,41 @@ def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-
     if len(unique_samples) != 2:
         raise ValueError("Sample column must contain exactly two unique labels")
 
-    sample1_values = value_column[sample_column == unique_samples[0]]
-    sample2_values = value_column[sample_column == unique_samples[1]]
-    statistic, p_value = stats.ttest_ind(sample1_values, sample2_values, equal_var=False, alternative=alternative)
+    sample1 = value_column[sample_column == unique_samples[0]]
+    sample2 = value_column[sample_column == unique_samples[1]]
+    warning_issued = False
+    for sample in [sample1, sample2]:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
+        
+    nobs1 = len(sample1)
+    nobs2 = len(sample2)
+    # Calculate Cohen's d
+    cohens_d = calculate_cohens_d(sample1, sample2)
+    # Calculate the power of the test
+    power = sm.stats.TTestIndPower().solve_power(effect_size=cohens_d, nobs1=nobs1, ratio=nobs2/nobs1, alpha=alpha)
+    # Calculate the type II error rate (β)
+    beta = 1 - power
+            
+    statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=False, alternative=alternative)
     
     if not return_results:
         print('T-критерий Уэлча')
-        print('alpha = ', alpha)
         print('p-value = ', p_value)
+        print('alpha = ', alpha)
+        print('beta = ', beta)
+        print("The effect size (Cohen's d) = ", cohens_d)
+        
         if p_value < alpha:
             print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
             print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return statistic, p_value
+        return statistic, p_value, beta, cohens_d
       
 def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
@@ -3176,8 +3258,8 @@ def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alter
     - sample1 (pd.Series): First sample values
     - sample2 (pd.Series): Second sample values
     - alpha (float, optional): Significance level (default: 0.05)
-    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
-    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+    - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
+    - return_results (bool, optional): Return (statistic, p_value, beta, cohens_d) instead of printing (default=False).
 
     Returns:
     - If return_results is False: None
@@ -3186,28 +3268,64 @@ def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alter
             The calculated t-statistic.
         - pvalue : (float or array)
             The two-tailed p-value.
+        - beta : (float)
+            The probability of Type II error (beta).
+        - cohens_d : (float)
+            The effect size (Cohen's d).
     """ 
-    if alternative not in ['two-sided', 'less', 'greater']:
-        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "greater",
+        "l": "greater",
+        "smaller": "less",
+        "s": "less"
+    }
+    alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not all(isinstance(sample, pd.Series) for sample in [sample1, sample2]):
+        raise ValueError("Input samples must be pd.Series")      
+    if not all(len(sample) > 0 for sample in [sample1, sample2]):
+        raise ValueError("All samples must have at least one value")       
     if not pd.api.types.is_numeric_dtype(sample1) or not pd.api.types.is_numeric_dtype(sample2):
         raise ValueError("sample1 and sample2 must contain numeric values")    
     if sample1.isna().sum() or sample2.isna().sum():
         raise ValueError(f'sample1 and sample2 must not have missing values.\nsample1 have {sample1.isna().sum()} missing values\nsample2 have {sample2.isna().sum()} missing values')
+    warning_issued = False
+    for sample in [sample1, sample2]:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))     
+    nobs1 = len(sample1)
+    nobs2 = len(sample2)
+    # Calculate Cohen's d
+    cohens_d = calculate_cohens_d(sample1, sample2)
+    # Calculate the power of the test
+    power = sm.stats.TTestIndPower().solve_power(effect_size=cohens_d, nobs1=nobs1, ratio=nobs2/nobs1, alpha=alpha)
+    # Calculate the type II error rate (β)
+    beta = 1 - power          
     statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=False, alternative=alternative)
     
 
     if not return_results:
         print('T-критерий Уэлча')
-        print('alpha = ', alpha)
         print('p-value = ', p_value)
+        print('alpha = ', alpha)
+        print('beta = ', beta)
+        print("The effect size (Cohen's d) = ", cohens_d)
+        
         if p_value < alpha:
             print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
             print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return statistic, p_value
+        return statistic, p_value, beta, cohens_d
     
 def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
@@ -3218,7 +3336,7 @@ def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 't
         where the first column contains sample labels (e.g., "male" and "female") and
         the second column contains corresponding values
     - alpha (float, optional): Significance level (default: 0.05)
-    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
     - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
 
     Returns:
@@ -3229,12 +3347,23 @@ def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 't
         - pvalue : (float)
             The associated *p*-value for the chosen alternative.
     """ 
-    if alternative not in ['two-sided', 'less', 'greater']:
-        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "greater",
+        "l": "greater",
+        "smaller": "less",
+        "s": "less"
+    }
+    alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input df must be pd.DataFrame")      
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")    
+        raise ValueError("Input DataFrame must have exactly two columns")      
     sample_column = df.iloc[:, 0]
     value_column = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(value_column):
@@ -3247,6 +3376,14 @@ def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 't
 
     sample1_values = value_column[sample_column == unique_samples[0]]
     sample2_values = value_column[sample_column == unique_samples[1]]
+    warning_issued = False
+    for sample in [sample1_values, sample2_values]:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))       
     statistic, p_value = stats.mannwhitneyu(sample1_values, sample2_values, alternative=alternative)
     
     if not return_results:
@@ -3268,7 +3405,7 @@ def mannwhitneyu(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, al
     - sample1 (pd.Series): First sample values
     - sample2 (pd.Series): Second sample values
     - alpha (float, optional): Significance level (default: 0.05)
-    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
     - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
 
     Returns:
@@ -3279,14 +3416,35 @@ def mannwhitneyu(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, al
         - pvalue : (float)
             The associated *p*-value for the chosen alternative.
     """ 
-    if alternative not in ['two-sided', 'less', 'greater']:
-        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "greater",
+        "l": "greater",
+        "smaller": "less",
+        "s": "less"
+    }
+    alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not all(isinstance(sample, pd.Series) for sample in [sample1, sample2]):
+        raise ValueError("Input samples must be pd.Series")    
+    if not all(len(sample) > 0 for sample in [sample1, sample2]):
+        raise ValueError("All samples must have at least one value")       
     if not pd.api.types.is_numeric_dtype(sample1) or not pd.api.types.is_numeric_dtype(sample2):
         raise ValueError("sample1 and sample2 must contain numeric values")    
     if sample1.isna().sum() or sample2.isna().sum():
         raise ValueError(f'sample1 and sample2 must not have missing values.\nsample1 have {sample1.isna().sum()} missing values\nsample2 have {sample2.isna().sum()} missing values')
+    warning_issued = False
+    for sample in [sample1, sample2]:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))    
     statistic, p_value = stats.mannwhitneyu(sample1, sample2, alternative=alternative)
     
     if not return_results:
@@ -3310,7 +3468,7 @@ def proportions_ztest(count1: int, count2: int, n1: int, n2: int, alpha: float =
     - n1 (int): Total number of observations in the first sample
     - n2 (int): Total number of observations in the second sample
     - alpha (float, optional): Significance level (default: 0.05)
-    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
     - return_results (bool, optional): Return (z_stat, p_value) instead of printing (default=False).
 
     Returns:
@@ -3321,8 +3479,16 @@ def proportions_ztest(count1: int, count2: int, n1: int, n2: int, alpha: float =
         - p-value : (float)
             p-value for the z-test
     """
-    if alternative not in ['two-sided', 'less', 'greater']:
-        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
     if not all(isinstance(x, int) for x in [count1, count2, n1, n2]):
@@ -3349,7 +3515,7 @@ def proportions_ztest_column(column: pd.Series, alpha: float=0.05, alternative: 
     Parameters:
     - column (pandas Series): The input column with two unique values.
     - alpha (float, optional): The significance level (default=0.05).
-    - alternative (str, optional): The alternative hypothesis (default='two-sided').
+    - alternative (str, optional): The alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default='two-sided').
     - return_results (bool, optional): Return (z_stat, p_value) instead of printing (default=False).
     
     Returns:
@@ -3360,10 +3526,22 @@ def proportions_ztest_column(column: pd.Series, alpha: float=0.05, alternative: 
         - p-value : (float)
             p-value for the z-test
     """
-    if alternative not in ['two-sided', 'less', 'greater']:
-        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if not isinstance(column, pd.Series):
+        raise ValueError("Input column must be pd.Series")        
+    if len(column) < 1:
+        raise ValueError("Input column must have at least one value")      
     if column.isna().sum():
         raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
 
@@ -3399,7 +3577,7 @@ def proportions_chi2(count1: int, count2: int, n1: int, n2: int, alpha: float = 
     - n1 (int): Total number of observations in the first sample
     - n2 (int): Total number of observations in the second sample
     - alpha (float, optional): Significance level (default: 0.05)
-    - alternative (str, optional): Alternative hypothesis ('two-sided', 'less', 'greater') (default: 'two-sided')
+    - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
     - return_results (bool, optional): Return (chi2_stat, p_value) instead of printing (default=False)
 
     Returns:
@@ -3410,8 +3588,16 @@ def proportions_chi2(count1: int, count2: int, n1: int, n2: int, alpha: float = 
         - p-value : (float)
             p-value for the chi-squared test
     """
-    if alternative not in ['two-sided', 'less', 'greater']:
-        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
     if not all(isinstance(x, int) for x in [count1, count2, n1, n2]):
@@ -3437,7 +3623,7 @@ def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: s
     Parameters:
     - column (pandas Series): The input column with two unique values.
     - alpha (float, optional): The significance level (default=0.05).
-    - alternative (str, optional): The alternative hypothesis (default='two-sided').
+    - alternative (str, optional): The alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default='two-sided').
     - return_results (bool, optional): Return (chi2_stat, p_value) instead of printing (default=False).
     
     Returns:
@@ -3448,10 +3634,22 @@ def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: s
         - p-value : (float)
             p-value for the chi-squared test
     """
-    if alternative not in ['two-sided', 'less', 'greater']:
-        raise Exception(f"alternative must be 'two-sided', 'less' or 'greater', but got {alternative}")
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if not isinstance(column, pd.Series):
+        raise ValueError("Input column must be pd.Series")    
+    if len(column) < 1:
+        raise ValueError("Input column must have at least one value")       
     if column.isna().sum():
         raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
 
@@ -3476,6 +3674,593 @@ def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: s
     else:
         return chi2_stat, p_value
     
+def anova_oneway_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a one-way ANOVA test.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns,
+        where the first column contains labels and
+        the second column contains corresponding values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The calculated F-statistic.
+        - pvalue : (float)
+            The associated p-value from the F distribution
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input df must be pd.DataFrame")      
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")  
+    labels = df.iloc[:, 0]
+    values = df.iloc[:, 1]
+    if not pd.api.types.is_numeric_dtype(values):
+        raise ValueError("Value column must contain numeric values")
+    if labels.isna().sum() or values.isna().sum():
+        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+    unique_labels = labels.unique()
+    if len(unique_labels) < 2:
+        raise ValueError("Labels must contain at least two unique values")
+
+    samples = [values[labels == label] for label in unique_labels]
+    warning_issued = False
+    for sample in samples:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))    
+    statistic, p_value = stats.f_oneway(*samples)
+    
+    if not return_results:
+        print('Однофакторный дисперсионный анализ')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value    
+    
+def anova_oneway(samples: list, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a one-way ANOVA test.
+
+    Parameters:
+    - samples (list): List of pd.Series, where each pd.Series contains values. There must be at least two samples.
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False)
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The calculated F-statistic.
+        - pvalue : (float)
+            The associated p-value from the F distribution
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not all(isinstance(sample, pd.Series) for sample in samples):
+        raise ValueError("Input samples must be a list of pd.Series")
+    if not all(pd.api.types.is_numeric_dtype(sample) for sample in samples):
+        raise ValueError("All values in samples must be numeric")
+    if not all(len(sample) > 0 for sample in samples):
+        raise ValueError("All samples must have at least one value")
+    if len(samples) < 2:
+        raise ValueError("Must have at least two samples")
+    warning_issued = False
+    for sample in samples:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+    statistic, p_value = stats.f_oneway(*samples)
+    if not return_results:
+        print('Однофакторный дисперсионный анализ')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value
+    
+def tukey_hsd_df(df: pd.DataFrame, alpha: float = 0.05) -> None:
+    """
+    Perform a Tukey's HSD test for pairwise comparisons.   
+    This test is commonly used to identify significant differences between groups in an ANOVA analysis,
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns,
+        where the first column contains labels and
+        the second column contains corresponding values
+    - alpha (float, optional): Significance level (default: 0.05)
+
+    Returns:
+    - None
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input df must be pd.DataFrame")      
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")    
+    labels = df.iloc[:, 0]
+    values = df.iloc[:, 1]
+    if not pd.api.types.is_numeric_dtype(values):
+        raise ValueError("Value column must contain numeric values")
+    if labels.isna().sum() or values.isna().sum():
+        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+    unique_labels = labels.unique()
+    if len(unique_labels) < 2:
+        raise ValueError("Labels must contain at least two unique values")
+
+    tukey = pairwise_tukeyhsd(endog=values, groups=labels, alpha=alpha)
+    print(tukey)
     
     
+def anova_oneway_welch_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a one-way ANOVA test using Welch's ANOVA. It is more reliable when the two samples   
+    have unequal variances and/or unequal sample sizes.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns,
+        where the first column contains labels and
+        the second column contains corresponding values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (ANOVA summary) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True: (pandas.DataFrame) aov
+            ANOVA summary:
+            - 'Source': Factor names
+            - 'SS': Sums of squares
+            - 'DF': Degrees of freedom
+            - 'MS': Mean squares
+            - 'F': F-values
+            - 'p-unc': uncorrected p-values
+            - 'np2': Partial eta-squared
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input df must be pd.DataFrame")      
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")  
+    labels_column = df.columns[0]
+    value_column = df.columns[1]      
+    labels = df[labels_column]
+    values = df[value_column]
+
+    if not pd.api.types.is_numeric_dtype(values):
+        raise ValueError("Value column must contain numeric values")
+    if labels.isna().sum() or values.isna().sum():
+        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+    unique_labels = labels.unique()
+    if len(unique_labels) < 2:
+        raise ValueError("Labels must contain at least two unique values")
+
+    anova_results = pg.welch_anova(dv=value_column, between=labels_column, data=df)
+    p_value = anova_results['p-unc'][0]
+    if not return_results:
+        print('Однофакторный дисперсионный анализ Welch')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return anova_results  
+    
+def kruskal_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a Kruskal-Wallis test. The Kruskal-Wallis H-test tests the null hypothesis  
+    that the population median of all of the groups are equal. It is a non-parametric version of ANOVA. 
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns,
+        where the first column contains labels and
+        the second column contains corresponding values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The calculated H-statistic.
+        - pvalue : (float)
+            The associated p-value from the chi-squared distribution
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input df must be pd.DataFrame")      
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")  
+    labels = df.iloc[:, 0]
+    values = df.iloc[:, 1]
+    if not pd.api.types.is_numeric_dtype(values):
+        raise ValueError("Value column must contain numeric values")
+    if labels.isna().sum() or values.isna().sum():
+        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+    unique_labels = labels.unique()
+    if len(unique_labels) < 2:
+        raise ValueError("Labels must contain at least two unique values")
+
+    samples = [values[labels == label] for label in unique_labels]
+    warning_issued = False
+    for sample in samples:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))    
+    statistic, p_value = stats.kruskal(*samples)
+    
+    if not return_results:
+        print('Тест Краскела-Уоллиса (H-критерий)')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value    
+    
+def kruskal(samples: list, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a Kruskal-Wallis test. The Kruskal-Wallis H-test tests the null hypothesis  
+    that the population median of all of the groups are equal. It is a non-parametric version of ANOVA. 
+
+    Parameters:
+    - samples (list): List of pd.Series, where each pd.Series contains values. There must be at least two samples.
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False)
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The calculated H-statistic.
+        - pvalue : (float)
+            The associated p-value from the chi-squared distribution
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not all(isinstance(sample, pd.Series) for sample in samples):
+        raise ValueError("Input samples must be a list of pd.Series")
+    if not all(pd.api.types.is_numeric_dtype(sample) for sample in samples):
+        raise ValueError("All values in samples must be numeric")
+    if not all(len(sample) > 0 for sample in samples):
+        raise ValueError("All samples must have at least one value")
+    if len(samples) < 2:
+        raise ValueError("Must have at least two samples")
+    warning_issued = False
+    for sample in samples:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+    statistic, p_value = stats.kruskal(*samples)
+    if not return_results:
+        print('Тест Краскела-Уоллиса (H-критерий)')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value    
+    
+def levene_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a Levene's test. Levene's test is a statistical test used to check if the variances of multiple samples are equal.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns,
+        where the first column contains labels and
+        the second column contains corresponding values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The calculated W-statistic.
+        - pvalue : (float)
+            The associated p-value from the F distribution
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input df must be pd.DataFrame")      
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")  
+    labels = df.iloc[:, 0]
+    values = df.iloc[:, 1]
+    if not pd.api.types.is_numeric_dtype(values):
+        raise ValueError("Value column must contain numeric values")
+    if labels.isna().sum() or values.isna().sum():
+        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+    unique_labels = labels.unique()
+    if len(unique_labels) < 2:
+        raise ValueError("Labels must contain at least two unique values")
+
+    samples = [values[labels == label] for label in unique_labels]
+    warning_issued = False
+    for sample in samples:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red')) 
+    statistic, p_value = stats.levene(*samples)
+    
+    if not return_results:
+        print('Тест Левена')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value
+    
+def levene(samples: list, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a Levene's test. Levene's test is a statistical test used to check if the variances of multiple samples are equal.
+
+    Parameters:
+    - samples (list): List of pd.Series, where each pd.Series contains values. There must be at least two samples.
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False)
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The calculated W-statistic.
+        - pvalue : (float)
+            The associated p-value from the F distribution
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not all(isinstance(sample, pd.Series) for sample in samples):
+        raise ValueError("Input samples must be a list of pd.Series")
+    if not all(pd.api.types.is_numeric_dtype(sample) for sample in samples):
+        raise ValueError("All values in samples must be numeric")
+    if not all(len(sample) > 0 for sample in samples):
+        raise ValueError("All samples must have at least one value")
+    if len(samples) < 2:
+        raise ValueError("Must have at least two samples")
+    warning_issued = False
+    for sample in samples:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+        
+    statistic, p_value = stats.levene(*samples)
+    if not return_results:
+        print('Тест Левена на гомогенность дисперсии')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value        
+    
+def bartlett_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a Bartlett's test. Bartlett's test is a statistical test used to check if the variances of multiple samples are equal.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns,
+        where the first column contains labels and
+        the second column contains corresponding values
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False).
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The calculated chi-squared statistic.
+        - pvalue : (float)
+            The associated p-value from the chi-squared distribution
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input df must be pd.DataFrame")      
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")  
+    labels = df.iloc[:, 0]
+    values = df.iloc[:, 1]
+    if not pd.api.types.is_numeric_dtype(values):
+        raise ValueError("Value column must contain numeric values")
+    if labels.isna().sum() or values.isna().sum():
+        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+    unique_labels = labels.unique()
+    if len(unique_labels) < 2:
+        raise ValueError("Labels must contain at least two unique values")
+
+    samples = [values[labels == label] for label in unique_labels]
+    warning_issued = False
+    for sample in samples:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red')) 
+    statistic, p_value = stats.bartlett(*samples)
+    
+    if not return_results:
+        print('Тест Бартлетта')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value    
+    
+def bartlett(samples: list, alpha: float = 0.05, return_results: bool = False) -> None:
+    """
+    Perform a Bartlett's test. Bartlett's test is a statistical test used to check if the variances of multiple samples are equal.
+
+    Parameters:
+    - samples (list): List of pd.Series, where each pd.Series contains values. There must be at least two samples.
+    - alpha (float, optional): Significance level (default: 0.05)
+    - return_results (bool, optional): Return (statistic, p_value) instead of printing (default=False)
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - statistic : (float)
+            The calculated chi-squared statistic.
+        - pvalue : (float)
+            The associated p-value from the chi-squared distribution
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    if not all(isinstance(sample, pd.Series) for sample in samples):
+        raise ValueError("Input samples must be a list of pd.Series")
+    if not all(pd.api.types.is_numeric_dtype(sample) for sample in samples):
+        raise ValueError("All values in samples must be numeric")
+    if not all(len(sample) > 0 for sample in samples):
+        raise ValueError("All samples must have at least one value")
+    if len(samples) < 2:
+        raise ValueError("Must have at least two samples")
+    warning_issued = False
+    for sample in samples:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+    statistic, p_value = stats.bartlett(*samples)
+    if not return_results:
+        print('Тест Бартлетта')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return statistic, p_value    
+    
+def confint_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05, alternative: str='two-sided'):
+    """
+    Calculate the confidence interval for the difference in means between two samples.
+
+    Parameters:
+    - sample1, sample2: Pandas Series objects
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+    - alternative : (str, optional) (default='two-sided').
+        The alternative hypothesis, H1, has to be one of the following
+
+           * 'two-sided' : H1: ``value1 - value2 - diff`` not equal to 0.
+           * 'larger' :   H1: ``value1 - value2 - diff > 0``
+           * 'smaller' :  H1: ``value1 - value2 - diff < 0``
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }    
+    # Check if samples are Pandas Series objects
+    if not (isinstance(sample1, pd.Series) and isinstance(sample2, pd.Series)):
+        raise ValueError("Samples must be Pandas Series objects")
+    warning_issued = False
+    for sample in [sample1, sample2]:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
+    # Calculate means and variances
+    mean1, var1 = sample1.mean(), sample1.var()
+    mean2, var2 = sample2.mean(), sample2.var()
+
+    # Calculate sample sizes
+    nobs1 = len(sample1)
+    nobs2 = len(sample2)
+
+
+    # Calculate pooled standard deviation
+    pooled_std = np.sqrt(((nobs1 - 1) * var1 + (nobs2 - 1) * var2) / (nobs1 + nobs2 - 2))
+    standard_error = pooled_std / np.sqrt(nobs1 + nobs2 - 2)
+    dof = nobs1 + nobs2 - 2
+
+    # Check if alternative is valid
+    if alternative not in ["two-sided", "2-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise ValueError("Invalid alternative")
+
+    # Calculate critical value and confidence interval bounds
+    if alternative in ["two-sided", "2s"]:
+        tcrit = stats.t.ppf(1 - alpha / 2.0, dof)
+        lower = mean1 - mean2 - tcrit * standard_error
+        upper = mean1 - mean2 + tcrit * standard_error
+    elif alternative in ["larger", "l"]:
+        tcrit = stats.t.ppf(alpha, dof)
+        lower = mean1 - mean2 + tcrit * standard_error
+        upper = np.inf
+    elif alternative in ["smaller", "s"]:
+        tcrit = stats.t.ppf(1 - alpha, dof)
+        lower = -np.inf
+        upper = mean1 - mean2 + tcrit * standard_error
+
+    return lower, upper
     
