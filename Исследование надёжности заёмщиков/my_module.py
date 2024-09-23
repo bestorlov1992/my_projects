@@ -3077,7 +3077,7 @@ def graph_analysis(df, cat_coluns, num_column):
                     )
     fig.show()
 
-def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series) -> float:
+def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series, equal_var=False) -> float:
     """
     Calculate Cohen's d from two independent samples.  
     Cohen's d is a measure of effect size used to quantify the standardized difference between the means of two groups.
@@ -3085,6 +3085,8 @@ def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series) -> float:
     Parameters:
     sample1 (pd.Series): First sample
     sample2 (pd.Series): Second sample
+    equal_var (bool): Whether to assume equal variances between the two samples. If `True`, the pooled standard deviation is used.   
+    If `False`, the standard error is calculated using the separate variances of each sample. Defaults to `False`.
 
     Returns:
     float: Cohen's d
@@ -3098,20 +3100,25 @@ def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series) -> float:
         raise ValueError("Both samples must be non-empty")
 
     # Calculate means and variances
-    mean1, var1 = sample1.mean(), sample1.var()
-    mean2, var2 = sample2.mean(), sample2.var()
+    mean1, var1 = sample1.mean(), sample1.var(ddof=1)
+    mean2, var2 = sample2.mean(), sample2.var(ddof=1)
 
     # Calculate sample sizes
-    nobs1 = len(sample1)
-    nobs2 = len(sample2)
+    n1 = len(sample1)
+    n2 = len(sample2)
 
-    # Calculate pooled standard deviation
-    pooled_std = np.sqrt(((nobs1 - 1) * var1 + (nobs2 - 1) * var2) / (nobs1 + nobs2 - 2))
+    if equal_var:
+        # Calculate pooled standard deviation
+        pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+        cohens_d = (mean1 - mean2) / pooled_std
+    else:
+        varn1 = var1 / n1
+        varn2 = var2 / n2
+        standard_error = np.sqrt(varn1 + varn2)  
+        cohens_d = (mean1 - mean2) / standard_error
 
-    # Calculate Cohen's d
-    cohens_d = (mean1 - mean2) / pooled_std
 
-    return cohens_d    
+    return cohens_d   
     
 # Хи-квадрат Пирсона
 # Не чувствителен к гетероскедастичности (неравномерной дисперсии) данных.    
@@ -3162,15 +3169,17 @@ def chi2_pearson(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, re
     else:
         return chi2, p_value, dof, expected
     
-def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, equal_var=False, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
-    Perform Welch's t-test for independent samples.
+    Perform t-test for independent samples.
 
     Parameters:
     - df (pd.DataFrame): DataFrame containing two columns,
         where the first column contains sample labels (e.g., "male" and "female") and
         the second column contains corresponding values
     - alpha (float, optional): Significance level (default: 0.05)
+    - equal_var (bool, optional): If True (default), perform a standard independent 2 sample test that assumes equal population variances.  
+        If False, perform Welch's t-test, which does not assume equal population variance.
     - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
     - return_results (bool, optional): Return (statistic, p_value, beta, cohens_d) instead of printing (default=False).
 
@@ -3228,20 +3237,19 @@ def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-
     nobs1 = len(sample1)
     nobs2 = len(sample2)
     # Calculate Cohen's d
-    cohens_d = calculate_cohens_d(sample1, sample2)
+    cohens_d = calculate_cohens_d(sample1, sample2, equal_var=equal_var)
     # Calculate the power of the test
     power = sm.stats.TTestIndPower().solve_power(effect_size=cohens_d, nobs1=nobs1, ratio=nobs2/nobs1, alpha=alpha)
     # Calculate the type II error rate (β)
     beta = 1 - power
             
-    statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=False, alternative=alternative)
+    statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=equal_var, alternative=alternative)
     
     if not return_results:
-        print('T-критерий Уэлча')
+        print('T-критерий')
         print('p-value = ', p_value)
         print('alpha = ', alpha)
         print('beta = ', beta)
-        print("The effect size (Cohen's d) = ", cohens_d)
         
         if p_value < alpha:
             print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
@@ -3250,14 +3258,16 @@ def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-
     else:
         return statistic, p_value, beta, cohens_d
       
-def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, equal_var=False, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
-    Perform Welch's t-test for independent samples.
+    Perform t-test for independent samples.
 
     Parameters:
     - sample1 (pd.Series): First sample values
     - sample2 (pd.Series): Second sample values
     - alpha (float, optional): Significance level (default: 0.05)
+    - equal_var (bool, optional): If True (default), perform a standard independent 2 sample test that assumes equal population variances.  
+        If False, perform Welch's t-test, which does not assume equal population variance.
     - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
     - return_results (bool, optional): Return (statistic, p_value, beta, cohens_d) instead of printing (default=False).
 
@@ -3305,12 +3315,12 @@ def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alter
     nobs1 = len(sample1)
     nobs2 = len(sample2)
     # Calculate Cohen's d
-    cohens_d = calculate_cohens_d(sample1, sample2)
+    cohens_d = calculate_cohens_d(sample1, sample2, equal_var=equal_var)
     # Calculate the power of the test
     power = sm.stats.TTestIndPower().solve_power(effect_size=cohens_d, nobs1=nobs1, ratio=nobs2/nobs1, alpha=alpha)
     # Calculate the type II error rate (β)
     beta = 1 - power          
-    statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=False, alternative=alternative)
+    statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=equal_var, alternative=alternative)
     
 
     if not return_results:
@@ -3318,7 +3328,6 @@ def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alter
         print('p-value = ', p_value)
         print('alpha = ', alpha)
         print('beta = ', beta)
-        print("The effect size (Cohen's d) = ", cohens_d)
         
         if p_value < alpha:
             print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
@@ -3457,8 +3466,61 @@ def mannwhitneyu(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, al
             print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return statistic, p_value
+
+def proportion_ztest_1sample(count: int, n: int, p0: float, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+    """
+    Perform a one-sample z-test for a proportion.
+
+    Parameters:
+    - count (int): Number of successes in the sample
+    - n (int): Total number of observations in the sample
+    - p0 (float): Known population proportion under the null hypothesis
+    - alpha (float, optional): Significance level (default: 0.05)
+    - alternative (str, optional): Alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default: 'two-sided')
+    - return_results (bool, optional): Return (z_stat, p_value) instead of printing (default=False)
+
+    Returns:
+    - If return_results is False: None
+    - If return_results is True
+        - zstat : (float)
+            test statistic for the z-test
+        - p-value : (float)
+            p-value for the z-test
+    """
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }
+    alternative = alternative_map[alternative] 
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+    if not all(isinstance(x, int) for x in [count, n]):
+        raise ValueError("count and n must be integers")
+    if not isinstance(p0, float) or p0 < 0 or p0 > 1:
+        raise ValueError("p0 must be a float between 0 and 1")
     
-def proportions_ztest(count1: int, count2: int, n1: int, n2: int, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
+    z_stat, p_value = stm.proportions_ztest(count=count, nobs=n, value=p0, alternative=alternative)
+    
+    if not return_results:
+        print('Один выборочный Z-тест для доли')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+    else:
+        return z_stat, p_value
+
+
+    
+def proportions_ztest_2sample(count1: int, count2: int, n1: int, n2: int, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
     Perform a z-test for proportions.
 
@@ -3489,6 +3551,7 @@ def proportions_ztest(count1: int, count2: int, n1: int, n2: int, alpha: float =
         "smaller": "smaller",
         "s": "smaller"
     }
+    alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
     if not all(isinstance(x, int) for x in [count1, count2, n1, n2]):
@@ -3508,7 +3571,7 @@ def proportions_ztest(count1: int, count2: int, n1: int, n2: int, alpha: float =
     else:
         return z_stat, p_value
         
-def proportions_ztest_column(column: pd.Series, alpha: float=0.05, alternative: str='two-sided', return_results: bool = False):
+def proportions_ztest_column_2sample(column: pd.Series, alpha: float=0.05, alternative: str='two-sided', return_results: bool = False):
     """
     Perform a z-test for proportions on a single column.
 
@@ -3536,6 +3599,7 @@ def proportions_ztest_column(column: pd.Series, alpha: float=0.05, alternative: 
         "smaller": "smaller",
         "s": "smaller"
     }
+    alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
     if not isinstance(column, pd.Series):
@@ -3551,6 +3615,12 @@ def proportions_ztest_column(column: pd.Series, alpha: float=0.05, alternative: 
     value_counts = column.value_counts()
     count1 = value_counts.values[0]
     count2 = value_counts.values[1]
+
+    if count1 < 2 or count2 < 2:
+        raise ValueError("Each sample must have at least two elements")
+    elif count1 < 30 or count2 < 30:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))      
+    
     n1 = n2 = column.size
     count = [count1, count2]
     nobs = [n1, n2]
@@ -3598,6 +3668,7 @@ def proportions_chi2(count1: int, count2: int, n1: int, n2: int, alpha: float = 
         "smaller": "smaller",
         "s": "smaller"
     }
+    alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
     if not all(isinstance(x, int) for x in [count1, count2, n1, n2]):
@@ -3644,6 +3715,7 @@ def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: s
         "smaller": "smaller",
         "s": "smaller"
     }
+    alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
     if not isinstance(column, pd.Series):
@@ -4183,9 +4255,9 @@ def bartlett(samples: list, alpha: float = 0.05, return_results: bool = False) -
     else:
         return statistic, p_value    
     
-def confint_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05, alternative: str='two-sided'):
+def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05, alternative: str='two-sided', equal_var=False) -> tuple:
     """
-    Calculate the confidence interval for the difference in means between two samples.
+    Calculate the confidence interval using t-statistic for the difference in means between two samples.
 
     Parameters:
     - sample1, sample2: Pandas Series objects
@@ -4198,6 +4270,8 @@ def confint_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05, 
            * 'two-sided' : H1: ``value1 - value2 - diff`` not equal to 0.
            * 'larger' :   H1: ``value1 - value2 - diff > 0``
            * 'smaller' :  H1: ``value1 - value2 - diff < 0``
+    - equal_var (bool): Whether to assume equal variances between the two samples. If `True`, the pooled standard deviation is used.   
+    If `False`, the standard error is calculated using the separate variances of each sample. Defaults to `False`.
 
     Returns
     -------
@@ -4219,6 +4293,9 @@ def confint_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05, 
         "smaller": "smaller",
         "s": "smaller"
     }    
+    alternative = alternative_map[alternative] 
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Check if samples are Pandas Series objects
     if not (isinstance(sample1, pd.Series) and isinstance(sample2, pd.Series)):
         raise ValueError("Samples must be Pandas Series objects")
@@ -4231,22 +4308,25 @@ def confint_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05, 
     if warning_issued:
         print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
     # Calculate means and variances
-    mean1, var1 = sample1.mean(), sample1.var()
-    mean2, var2 = sample2.mean(), sample2.var()
+    mean1, var1 = sample1.mean(), sample1.var(ddof=1)
+    mean2, var2 = sample2.mean(), sample2.var(ddof=1)
 
     # Calculate sample sizes
-    nobs1 = len(sample1)
-    nobs2 = len(sample2)
+    n1 = len(sample1)
+    n2 = len(sample2)
 
+    if equal_var:
+        # Calculate pooled standard deviation
+        pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+        standard_error = pooled_std * np.sqrt(1/n1 + 1/n2)
 
-    # Calculate pooled standard deviation
-    pooled_std = np.sqrt(((nobs1 - 1) * var1 + (nobs2 - 1) * var2) / (nobs1 + nobs2 - 2))
-    standard_error = pooled_std / np.sqrt(nobs1 + nobs2 - 2)
-    dof = nobs1 + nobs2 - 2
+        dof = n1 + n2 - 2
+    else:
+        varn1 = var1 / n1
+        varn2 = var2 / n2
+        dof = (varn1 + varn2)**2 / (varn1**2 / (n1 - 1) + varn2**2 / (n2 - 1))
+        standard_error = np.sqrt(varn1 + varn2)        
 
-    # Check if alternative is valid
-    if alternative not in ["two-sided", "2-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise ValueError("Invalid alternative")
 
     # Calculate critical value and confidence interval bounds
     if alternative in ["two-sided", "2s"]:
@@ -4263,4 +4343,424 @@ def confint_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05, 
         upper = mean1 - mean2 + tcrit * standard_error
 
     return lower, upper
+
+def confint_t_1sample(sample: pd.Series, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+    """
+    Calculate the confidence interval using t-statistic for the mean of one sample.
+
+    Parameters:
+    - sample: Pandas Series object
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+    - alternative : (str, optional) (default='two-sided').
+        The alternative hypothesis, H1, has to be one of the following
+
+           * 'two-sided' : H1: ``value - mu`` not equal to 0.
+           * 'larger' :   H1: ``value - mu > 0``
+           * 'smaller' :  H1: ``value - mu < 0``
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }    
+    alternative = alternative_map[alternative] 
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    # Check if sample is Pandas Series object
+    if not isinstance(sample, pd.Series):
+        raise ValueError("Sample must be Pandas Series object")
+    if len(sample) < 2:
+        raise ValueError("Sample must have at least two elements")
+    elif len(sample) < 30:
+        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+    # Calculate mean and variance
+    mean, var = sample.mean(), sample.var(ddof=1)
+
+    # Calculate sample size
+    n = len(sample)
+
+    # Calculate standard error
+    standard_error = np.sqrt(var / n)
+
+    # Calculate degrees of freedom
+    dof = n - 1
+
+    # Calculate critical value and confidence interval bounds
+    if alternative in ["two-sided", "2s"]:
+        tcrit = stats.t.ppf(1 - alpha / 2.0, dof)
+        lower = mean - tcrit * standard_error
+        upper = mean + tcrit * standard_error
+    elif alternative in ["larger", "l"]:
+        tcrit = stats.t.ppf(alpha, dof)
+        lower = mean + tcrit * standard_error
+        upper = np.inf
+    elif alternative in ["smaller", "s"]:
+        tcrit = stats.t.ppf(1 - alpha, dof)
+        lower = -np.inf
+        upper = mean + tcrit * standard_error
+
+    return lower, upper
     
+    
+def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str='two-sided', equal_var=False) -> tuple:
+    """
+    Calculate the confidence interval using t-statistic for the difference in means between two samples.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing two columns, where the first column contains labels and the second column contains values
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+    - alternative : (str, optional) (default='two-sided').
+        The alternative hypothesis, H1, has to be one of the following
+
+           * 'two-sided' : H1: ``value1 - value2 - diff`` not equal to 0.
+           * 'larger' :   H1: ``value1 - value2 - diff > 0``
+           * 'smaller' :  H1: ``value1 - value2 - diff < 0``
+    - equal_var (bool): Whether to assume equal variances between the two samples. If `True`, the pooled standard deviation is used.   
+    If `False`, the standard error is calculated using the separate variances of each sample. Defaults to `False`.
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }    
+    alternative = alternative_map[alternative] 
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    # Check if input is a Pandas DataFrame
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input must be a Pandas DataFrame")
+    if df.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")
+    
+    # Extract labels and values from the DataFrame
+    labels = df.iloc[:, 0]
+    values = df.iloc[:, 1]
+    
+    # Check if values are numeric
+    if not pd.api.types.is_numeric_dtype(values):
+        raise ValueError("Values must be numeric")
+    
+    # Check for missing values
+    if labels.isna().sum() or values.isna().sum():
+        raise ValueError("Labels and values must not have missing values")
+    
+    # Extract unique labels
+    unique_labels = labels.unique()
+    if len(unique_labels) != 2:
+        raise ValueError("Labels must contain exactly two unique values")
+    
+    # Split values into two samples based on labels
+    sample1 = values[labels == unique_labels[0]]
+    sample2 = values[labels == unique_labels[1]]
+    warning_issued = False
+    for sample in [sample1, sample2]:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))      
+    # Calculate means and variances
+    mean1, var1 = sample1.mean(), sample1.var(ddof=1)
+    mean2, var2 = sample2.mean(), sample2.var(ddof=1)
+
+    # Calculate sample sizes
+    n1 = len(sample1)
+    n2 = len(sample2)
+    if equal_var:
+        # Calculate pooled standard deviation
+        pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+        standard_error = pooled_std * np.sqrt(1/n1 + 1/n2)
+
+        dof = n1 + n2 - 2
+    else:
+        varn1 = var1 / n1
+        varn2 = var2 / n2
+        dof = (varn1 + varn2)**2 / (varn1**2 / (n1 - 1) + varn2**2 / (n2 - 1))
+        standard_error = np.sqrt(varn1 + varn2)        
+
+
+    # Calculate critical value and confidence interval bounds
+    if alternative in ["two-sided", "2s"]:
+        tcrit = stats.t.ppf(1 - alpha / 2.0, dof)
+        lower = mean1 - mean2 - tcrit * standard_error
+        upper = mean1 - mean2 + tcrit * standard_error
+    elif alternative in ["larger", "l"]:
+        tcrit = stats.t.ppf(alpha, dof)
+        lower = mean1 - mean2 + tcrit * standard_error
+        upper = np.inf
+    elif alternative in ["smaller", "s"]:
+        tcrit = stats.t.ppf(1 - alpha, dof)
+        lower = -np.inf
+        upper = mean1 - mean2 + tcrit * standard_error
+
+    return lower, upper
+
+def confint_proportion_ztest_1sample_column(sample: pd.Series, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+    """
+    Calculate the confidence interval for a proportion in one sample containing 0 or 1.
+
+    Parameters:
+    - sample: Pandas Series object containing 0 or 1
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+    - alternative : (str, optional) (default='two-sided').
+        The alternative hypothesis, H1, has to be one of the following
+
+           * 'two-sided' : H1: ``p - p0`` not equal to 0.
+           * 'larger' :   H1: ``p - p0 > 0``
+           * 'smaller' :  H1: ``p - p0 < 0``
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }    
+    alternative = alternative_map[alternative] 
+    # Check if sample contains only 0 and 1
+    if not ((sample == 0) | (sample == 1)).all():
+        raise ValueError("Sample must contain only 0 and 1")      
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    # Check if sample is Pandas Series object
+    if not isinstance(sample, pd.Series):
+        raise ValueError("Sample must be Pandas Series object")
+    if len(sample) < 2:
+        raise ValueError("Sample must have at least two elements")
+    elif len(sample) < 30:
+        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+    # Calculate proportion
+    p = sample.mean()
+
+    # Calculate standard error
+    standard_error = np.sqrt(p * (1 - p) / len(sample))
+
+    # Calculate critical value and confidence interval bounds
+    if alternative in ["two-sided", "2s"]:
+        zcrit = stats.norm.ppf(1 - alpha / 2.0)
+        lower = p - zcrit * standard_error
+        upper = p + zcrit * standard_error
+    elif alternative in ["larger", "l"]:
+        zcrit = stats.norm.ppf(alpha)
+        lower = p + zcrit * standard_error
+        upper = 1
+    elif alternative in ["smaller", "s"]:
+        zcrit = stats.norm.ppf(1 - alpha)
+        lower = 0
+        upper = p + zcrit * standard_error
+
+    return lower, upper
+
+def confint_proportion_ztest_1sample(count: int, nobs: int, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+    """
+    Calculate the confidence interval for a proportion in one sample.
+
+    Parameters:
+    - count: int, number of successes (1s) in the sample
+    - nobs: int, total number of observations in the sample
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+    - alternative : (str, optional) (default='two-sided').
+        The alternative hypothesis, H1, has to be one of the following
+
+           * 'two-sided' : H1: ``p - p0`` not equal to 0.
+           * 'larger' :   H1: ``p - p0 > 0``
+           * 'smaller' :  H1: ``p - p0 < 0``
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }    
+    alternative = alternative_map[alternative] 
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    elif nobs < 30:
+        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+    # Calculate proportion
+    p = count / nobs
+
+    # Calculate standard error
+    standard_error = np.sqrt(p * (1 - p) / nobs)
+
+    # Calculate critical value and confidence interval bounds
+    if alternative in ["two-sided", "2s"]:
+        zcrit = stats.norm.ppf(1 - alpha / 2.0)
+        lower = p - zcrit * standard_error
+        upper = p + zcrit * standard_error
+    elif alternative in ["larger", "l"]:
+        zcrit = stats.norm.ppf(alpha)
+        lower = p + zcrit * standard_error
+        upper = 1
+    elif alternative in ["smaller", "s"]:
+        zcrit = stats.norm.ppf(1 - alpha)
+        lower = 0
+        upper = p + zcrit * standard_error
+
+    return lower, upper
+
+def confint_proportion_ztest_2sample(count1: int, nobs1: int, count2: int, nobs2: int, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+    """
+    Calculate the confidence interval using normal distribution for the difference of two proportions.
+
+    Parameters:
+    - count1: int, number of successes (1s) in the first sample
+    - nobs1: int, total number of observations in the first sample
+    - count2: int, number of successes (1s) in the second sample
+    - nobs2: int, total number of observations in the second sample
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+    - alternative : (str, optional) (default='two-sided').
+        The alternative hypothesis, H1, has to be one of the following
+
+           * 'two-sided' : H1: ``p1 - p2`` not equal to 0.
+           * 'larger' :   H1: ``p1 - p2 > 0``
+           * 'smaller' :  H1: ``p1 - p2 < 0``
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }    
+    alternative = alternative_map[alternative] 
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    elif nobs1 < 30 or nobs2 < 30:
+        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+    # Calculate proportions
+    p1 = count1 / nobs1
+    p2 = count2 / nobs2
+
+    # Calculate standard error
+    standard_error = np.sqrt(p1 * (1 - p1) / nobs1 + p2 * (1 - p2) / nobs2)
+
+    # Calculate critical value and confidence interval bounds
+    if alternative in ["two-sided", "2s"]:
+        zcrit = stats.norm.ppf(1 - alpha / 2.0)
+        lower = (p1 - p2) - zcrit * standard_error
+        upper = (p1 - p2) + zcrit * standard_error
+    elif alternative in ["larger", "l"]:
+        zcrit = stats.norm.ppf(alpha)
+        lower = (p1 - p2) + zcrit * standard_error
+        upper = 1
+    elif alternative in ["smaller", "s"]:
+        zcrit = stats.norm.ppf(1 - alpha)
+        lower = -1
+        upper = (p1 - p2) + zcrit * standard_error
+
+    return lower, upper
+
+def confint_proportion_2sample_statsmodels(count1: int, nobs1: int, count2: int, nobs2: int, alpha: float=0.05) -> tuple:
+    """
+    Calculate the confidence interval for the difference of two proportions only 'two-sided' alternative.
+
+    Parameters:
+    - count1: int, number of successes (1s) in the first sample
+    - nobs1: int, total number of observations in the first sample
+    - count2: int, number of successes (1s) in the second sample
+    - nobs2: int, total number of observations in the second sample
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    elif nobs1 < 30 or nobs2 < 30:
+        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+    
+    lower, upper = stm.confint_proportions_2indep(count1=count1, nobs1=nobs1, count2=count2, nobs2=nobs2, alpha=alpha)
+    return lower, upper
+
+
