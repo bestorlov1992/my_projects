@@ -85,7 +85,7 @@ def plotly_default_settings(fig):
         title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)"),
         title={'text': f'<b>{fig.layout.title.text}</b>'},
         # Для подписей и меток
-        font=dict(size=14, family="Lora", color="rgba(0, 0, 0, 1)"),
+        font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)"),
         xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"),
         yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"),
         xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"),
@@ -4641,6 +4641,11 @@ def confint_proportion_ztest_1sample(count: int, nobs: int, alpha: float=0.05, a
     alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    # Additional checks
+    if nobs < 2:
+        raise ValueError("Sample (nobs) must have at least two observations")
+    if count > nobs:
+        raise ValueError("Count cannot be greater than sample size")
     elif nobs < 30:
         print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
     # Calculate proportion
@@ -4707,6 +4712,11 @@ def confint_proportion_ztest_2sample(count1: int, nobs1: int, count2: int, nobs2
     alternative = alternative_map[alternative] 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    # Additional checks
+    if nobs1 < 2 or nobs2 < 2:
+        raise ValueError("Each sample (nobs1 and nobs2) must have at least two observations")
+    if count1 > nobs1 or count2 > nobs2:
+        raise ValueError("Count cannot be greater than sample size")
     elif nobs1 < 30 or nobs2 < 30:
         print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
     # Calculate proportions
@@ -4731,6 +4741,91 @@ def confint_proportion_ztest_2sample(count1: int, nobs1: int, count2: int, nobs2
         upper = (p1 - p2) + zcrit * standard_error
 
     return lower, upper
+
+def confint_proportion_ztest_column_2sample(column: pd.Series, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+    """
+    Calculate the confidence interval using normal distribution for the difference of two proportions.
+
+    Parameters:
+    - column: pd.Series, input column with two unique values
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+    - alternative : (str, optional) (default='two-sided').
+        The alternative hypothesis, H1, has to be one of the following
+
+           * 'two-sided' : H1: ``p1 - p2`` not equal to 0.
+           * 'larger' :   H1: ``p1 - p2 > 0``
+           * 'smaller' :  H1: ``p1 - p2 < 0``
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
+        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+    alternative_map = {
+        "two-sided": "two-sided",
+        "2s": "two-sided",
+        "larger": "larger",
+        "l": "larger",
+        "smaller": "smaller",
+        "s": "smaller"
+    }    
+    alternative = alternative_map[alternative]  
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")       
+    # Validate input column
+    if not isinstance(column, pd.Series):
+        raise ValueError("Input column must be pd.Series")
+    if len(column) < 1:
+        raise ValueError("Input column must have at least one value")
+    if column.isna().sum():
+        raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
+    if column.unique().size != 2:
+        raise Exception(f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
+
+    value_counts = column.value_counts()
+    count1 = value_counts.values[0]
+    count2 = value_counts.values[1]
+    nobs1 = nobs2 = column.size
+
+    # Additional checks
+    if nobs1 < 2 or nobs2 < 2:
+        raise ValueError("Each sample (nobs1 and nobs2) must have at least two observations")
+    if count1 > nobs1 or count2 > nobs2:
+        raise ValueError("Count cannot be greater than sample size")
+    elif nobs1 < 30 or nobs2 < 30:
+        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+        
+    # Calculate proportions
+    p1 = count1 / nobs1
+    p2 = count2 / nobs2
+
+    # Calculate standard error
+    standard_error = np.sqrt(p1 * (1 - p1) / nobs1 + p2 * (1 - p2) / nobs2)
+
+    # Calculate critical value and confidence interval bounds
+    if alternative in ["two-sided", "2s"]:
+        zcrit = stats.norm.ppf(1 - alpha / 2.0)
+        lower = (p1 - p2) - zcrit * standard_error
+        upper = (p1 - p2) + zcrit * standard_error
+    elif alternative in ["larger", "l"]:
+        zcrit = stats.norm.ppf(alpha)
+        lower = (p1 - p2) + zcrit * standard_error
+        upper = 1
+    elif alternative in ["smaller", "s"]:
+        zcrit = stats.norm.ppf(1 - alpha)
+        lower = -1
+        upper = (p1 - p2) + zcrit * standard_error
+
+    return lower, upper     
 
 def confint_proportion_2sample_statsmodels(count1: int, nobs1: int, count2: int, nobs2: int, alpha: float=0.05) -> tuple:
     """
@@ -4757,10 +4852,316 @@ def confint_proportion_2sample_statsmodels(count1: int, nobs1: int, count2: int,
     """
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
+    # Additional checks
+    if nobs1 < 2 or nobs2 < 2:
+        raise ValueError("Each sample (nobs1 and nobs2) must have at least two observations")
+    if count1 > nobs1 or count2 > nobs2:
+        raise ValueError("Count cannot be greater than sample size")
     elif nobs1 < 30 or nobs2 < 30:
-        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))    
     
     lower, upper = stm.confint_proportions_2indep(count1=count1, nobs1=nobs1, count2=count2, nobs2=nobs2, alpha=alpha)
     return lower, upper
 
+def confint_proportion_coluns_2sample_statsmodels(column: pd.Series, alpha: float=0.05) -> tuple:
+    """
+    Calculate the confidence interval for the difference of two proportions only 'two-sided' alternative.
 
+    Parameters:
+    - column: pd.Series, input column with two unique values
+    - alpha : float (default=0.05).
+        Significance level for the confidence interval, coverage is
+        ``1-alpha``.
+
+    Returns
+    -------
+    - ci: tuple, confidence interval (lower, upper)
+        - lower : float
+            Lower confidence limit. This is -inf for the one-sided alternative
+            "smaller".
+        - upper : float
+            Upper confidence limit. This is inf for the one-sided alternative
+            "larger".
+    """
+    if alpha < 0 or alpha > 1:
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")       
+    # Validate input column
+    if not isinstance(column, pd.Series):
+        raise ValueError("Input column must be pd.Series")
+    if len(column) < 1:
+        raise ValueError("Input column must have at least one value")
+    if column.isna().sum():
+        raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
+    if column.unique().size != 2:
+        raise Exception(f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
+
+    value_counts = column.value_counts()
+    count1 = value_counts.values[0]
+    count2 = value_counts.values[1]
+    nobs1 = nobs2 = column.size
+    # Additional checks
+    if nobs1 < 2 or nobs2 < 2:
+        raise ValueError("Each sample (nobs1 and nobs2) must have at least two observations")
+    if count1 > nobs1 or count2 > nobs2:
+        raise ValueError("Count cannot be greater than sample size")
+    elif nobs1 < 30 or nobs2 < 30:
+        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))       
+    
+    lower, upper = stm.confint_proportions_2indep(count1=count1, nobs1=nobs1, count2=count2, nobs2=nobs2, alpha=alpha)
+    return lower, upper
+
+def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series, 
+                         stat_func: callable = np.mean, 
+                         bootstrap_conf_level: float = 0.95, 
+                         num_boot: int = 1000,
+                         alpha: float = 0.05,
+                         p_value_method: str = 'normal_approx',
+                         plot: bool = True,
+                         return_boot_data: bool = False,
+                         return_results: bool = False) -> tuple:
+    """
+    Perform bootstrap resampling to estimate the difference of a statistic between two samples.
+
+    Parameters:
+    - sample1, sample2: pd.Series, two samples to compare
+    - stat_func: callable, statistical function to apply to each bootstrap sample (default: np.mean)
+    - bootstrap_conf_level: float, significance level for confidence interval (must be between 0 and 1 inclusive) (default: 0.95)
+    - num_boot: int, number of bootstrap iterations (default: 1000)
+    - alpha (float, optional): Significance level (default: 0.05)
+    - p_value_method: str, method for calculating the p-value (default: 'normal_approx', options: 'normal_approx', 'kde')
+    - plot: bool, whether to show the plot of the bootstrap distribution (default: True)
+    - return_boot_data: bool, whether to return the bootstrap data (default: False)
+    - return_results (bool, optional): Return (chi2, p_value, dof, expected) instead of printing (default=False).
+
+    Returns:
+    - If return_results is True
+        - If return_boot_data is False: ci: tuple, confidence interval for the difference in means, p_value: float, p-value for the null hypothesis that the means are equal
+        - If return_boot_data is True: boot_data: list, bootstrap estimates of the difference in means, ci: tuple, confidence interval for the difference in means, p_value: float, p-value for the null hypothesis that the means are equal
+        - If plot is True: additionaly return plotly fig object 
+        Default (ci, p_value, fig)
+    - Else None
+    """
+    def human_readable_number(x):
+        if x >= 1e6 or x <= -1e6:
+            return f"{x/1e6:.1f}M"
+        elif x >= 1e3 or x <= -1e3:
+            return f"{x/1e3:.1f}k"
+        else:
+            return f"{x:.1f}"
+    def  plot_data(boot_data):
+        # Create bins and histogram values using NumPy
+
+        bins = np.linspace(boot_data.min(), boot_data.max(), 30)
+        hist, bin_edges = np.histogram(boot_data, bins=bins)
+        text = [f'{human_readable_number(bin_edges[i])} - {human_readable_number(bin_edges[i+1])}' for i in range(len(bin_edges)-1)]
+        bins = [0.5 * (bin_edges[i] + bin_edges[i+1]) for i in range(len(bin_edges)-1)]
+
+        # Create a Plotly figure with the histogram values and bin edges
+        fig = px.bar(x=bins, y=hist, title="Bootstrap Distribution of Difference")
+
+        # Color the bars outside the CI orange
+        ci_lower, ci_upper = ci
+        colors = ["#049CB3" if x < ci_lower or x > ci_upper else 'rgba(128, 60, 170, 0.9)' for x in bins]
+        fig.data[0].marker.color = colors
+        fig.data[0].text = text
+        fig.add_vline(x=ci_lower, line_width=2, line_color="#049CB3", annotation_text=f"CI Lower: {ci_lower:.2f}")
+        fig.add_vline(x=ci_upper, line_width=2, line_color="#049CB3", annotation_text=f"CI Upper: {ci_upper:.2f}")
+        fig.update_annotations(font_size=16)
+        fig.update_traces(hovertemplate='count=%{y}<br>x=%{text}', textposition='none')
+        # Remove gap between bars and show white line
+        fig.update_layout(
+            width=800,
+            bargap=0,
+            xaxis_title="",
+            yaxis_title="Count",
+            title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)"),
+            title={'text': f'<b>{fig.layout.title.text}</b>'},
+            # Для подписей и меток
+            font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)"),
+            xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"),
+            yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"),
+            xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"),
+            yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"),
+            xaxis_linecolor="rgba(0, 0, 0, 0.5)",
+            # xaxis_linewidth=2,
+            yaxis_linecolor="rgba(0, 0, 0, 0.5)",
+            # yaxis_linewidth=2
+            margin=dict(l=50, r=50, b=50, t=70),
+            hoverlabel=dict(bgcolor="white")
+        )
+        # Show the plot
+        return fig
+            
+    # Check input types and lengths
+    if not isinstance(sample1, pd.Series) or not isinstance(sample2, pd.Series):
+        raise ValueError("Input samples must be pd.Series")
+    warning_issued = False
+    for sample in [sample1, sample2]:
+        if len(sample) < 2:
+            raise ValueError("Each sample must have at least two elements")
+        elif len(sample) < 30:
+            warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
+    # Bootstrap Sampling
+    boot_data = np.empty(num_boot)
+    max_len = max(len(sample1), len(sample2))
+    for i in tqdm(range(num_boot), desc="Bootstrapping"):
+        samples_1 = sample1.sample(max_len, replace=True).values
+        samples_2 = sample2.sample(max_len, replace=True).values
+        boot_data[i] = stat_func(samples_1) - stat_func(samples_2)
+
+    # Confidence Interval Calculation
+    lower_bound = (1 - bootstrap_conf_level) / 2
+    upper_bound = 1 - lower_bound
+    ci = tuple(np.percentile(boot_data, [100 * lower_bound, 100 * upper_bound]))
+
+    # P-value Calculation
+    if p_value_method == 'normal_approx':
+        p_value = 2 * min(
+            stats.norm.cdf(0, np.mean(boot_data), np.std(boot_data)),
+            stats.norm.cdf(0, -np.mean(boot_data), np.std(boot_data))
+        )
+    elif p_value_method == 'kde':
+        kde = stats.gaussian_kde(boot_data)
+        p_value = 2 * min(kde.integrate_box_1d(-np.inf, 0), kde.integrate_box_1d(0, np.inf))
+    else:
+        raise ValueError("Invalid p_value_method. Must be 'normal_approx' or 'kde'")
+
+    if not return_results:
+        print('Bootstrap resampling to estimate the difference')
+        print('alpha = ', alpha)
+        print('p-value = ', p_value)
+        print('ci = ', ci)
+        if p_value < alpha:
+            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+        else:
+            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+        plot_data(boot_data).show()
+    else:
+        res = []
+        if return_boot_data:
+            res.extend([boot_data, ci, p_value])
+        else:
+            res.extend([ci, p_value])
+        if plot:
+            res.append(plot_data(boot_data))
+
+        return tuple(res)
+    
+def bootstrap_single_sample(sample: pd.Series,
+                         stat_func: callable = np.mean, 
+                         bootstrap_conf_level: float = 0.95, 
+                         num_boot: int = 1000,
+                         plot: bool = True,
+                         return_boot_data: bool = False,
+                         return_results: bool = False) -> tuple:
+    """
+    Perform bootstrap resampling to estimate the variability of a statistic for a single sample.
+
+    Parameters:
+    - sample1, sample2: pd.Series, two samples to compare
+    - stat_func: callable, statistical function to apply to each bootstrap sample (default: np.mean)
+    - bootstrap_conf_level: float, significance level for confidence interval (must be between 0 and 1 inclusive) (default: 0.95)
+    - num_boot: int, number of bootstrap iterations (default: 1000)
+    - plot: bool, whether to show the plot of the bootstrap distribution (default: True)
+    - return_boot_data: bool, whether to return the bootstrap data (default: False)
+    - return_results (bool, optional): Return (chi2, p_value, dof, expected) instead of printing (default=False).
+
+    Returns:
+    - If return_results is True
+        - If return_boot_data is False: ci: tuple, confidence interval for the difference in means
+        - If return_boot_data is True: boot_data: list, bootstrap estimates of the difference in means, ci: tuple, confidence interval for the difference in means
+        - If plot is True: additionaly return plotly fig object 
+        Default (ci, p_value, fig)
+    - Else None
+    """
+    def human_readable_number(x):
+        if x >= 1e6 or x <= -1e6:
+            return f"{x/1e6:.1f}M"
+        elif x >= 1e3 or x <= -1e3:
+            return f"{x/1e3:.1f}k"
+        else:
+            return f"{x:.1f}"
+    def  plot_data(boot_data):
+        # Create bins and histogram values using NumPy
+
+        bins = np.linspace(boot_data.min(), boot_data.max(), 30)
+        hist, bin_edges = np.histogram(boot_data, bins=bins)
+        text = [f'{human_readable_number(bin_edges[i])} - {human_readable_number(bin_edges[i+1])}' for i in range(len(bin_edges)-1)]
+        bins = [0.5 * (bin_edges[i] + bin_edges[i+1]) for i in range(len(bin_edges)-1)]
+
+        # Create a Plotly figure with the histogram values and bin edges
+        fig = px.bar(x=bins, y=hist, title="Bootstrap Distribution")
+
+        # Color the bars outside the CI orange
+        ci_lower, ci_upper = ci
+        colors = ["#049CB3" if x < ci_lower or x > ci_upper else 'rgba(128, 60, 170, 0.9)' for x in bins]
+        fig.data[0].marker.color = colors
+        fig.data[0].text = text
+        fig.add_vline(x=ci_lower, line_width=2, line_color="#049CB3", annotation_text=f"CI Lower: {ci_lower:.2f}")
+        fig.add_vline(x=ci_upper, line_width=2, line_color="#049CB3", annotation_text=f"CI Upper: {ci_upper:.2f}")
+        fig.update_annotations(font_size=16)
+        fig.update_traces(hovertemplate='count=%{y}<br>x=%{text}', textposition='none')
+        # Remove gap between bars and show white line
+        fig.update_layout(
+            width=800,
+            bargap=0,
+            xaxis_title="",
+            yaxis_title="Count",
+            title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)"),
+            title={'text': f'<b>{fig.layout.title.text}</b>'},
+            # Для подписей и меток
+            font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)"),
+            xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"),
+            yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"),
+            xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"),
+            yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"),
+            xaxis_linecolor="rgba(0, 0, 0, 0.5)",
+            # xaxis_linewidth=2,
+            yaxis_linecolor="rgba(0, 0, 0, 0.5)",
+            # yaxis_linewidth=2
+            margin=dict(l=50, r=50, b=50, t=70),
+            hoverlabel=dict(bgcolor="white")
+        )
+        # Show the plot
+        return fig
+            
+    # Check input types and lengths
+    if not isinstance(sample1, pd.Series):
+        raise ValueError("Input sample must be pd.Series")
+    warning_issued = False
+    if len(sample) < 2:
+        raise ValueError("Each sample must have at least two elements")
+    elif len(sample) < 30:
+        warning_issued = True
+    if warning_issued:
+        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
+    # Bootstrap Sampling
+    boot_data = np.empty(num_boot)
+    max_len = len(sample)
+    for i in tqdm(range(num_boot), desc="Bootstrapping"):
+        samples_1 = sample.sample(max_len, replace=True).values
+        boot_data[i] = stat_func(samples_1)
+
+    # Confidence Interval Calculation
+    lower_bound = (1 - bootstrap_conf_level) / 2
+    upper_bound = 1 - lower_bound
+    ci = tuple(np.percentile(boot_data, [100 * lower_bound, 100 * upper_bound]))
+
+    if not return_results:
+        print('Bootstrap resampling')
+        print('ci = ', ci)
+        plot_data(boot_data).show()
+    else:
+        res = []
+        if return_boot_data:
+            res.extend([boot_data, ci])
+        else:
+            res.extend([ci])
+        if plot:
+            res.append(plot_data(boot_data))
+
+        return tuple(res)
+    
+           
