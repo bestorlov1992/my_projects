@@ -5128,7 +5128,7 @@ def bootstrap_single_sample(sample: pd.Series,
         return fig
             
     # Check input types and lengths
-    if not isinstance(sample1, pd.Series):
+    if not isinstance(sample, pd.Series):
         raise ValueError("Input sample must be pd.Series")
     warning_issued = False
     if len(sample) < 2:
