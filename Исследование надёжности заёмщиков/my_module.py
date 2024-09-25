@@ -431,7 +431,7 @@ def make_widget_pct(column):
     q_75 = pretty_value(column.quantile(0.75))
     median_ = pretty_value(column.median())
     q_25 = pretty_value(column.quantile(0.25))
-    q_5 = pretty_value(column.quantile(0.5))
+    q_5 = pretty_value(column.quantile(0.05))
     min_ = pretty_value(column.min())
     column_summary = pd.DataFrame({
         'Max': [max_], '95%': [q_95], '75%': [q_75], 'Median': [median_], '25%': [q_25], '5%': [q_5], 'Min': [min_]
@@ -705,8 +705,8 @@ def make_widget_summary_obj(column):
 
 def make_widget_value_counts_obj(column):
     column_name = column.name
-    val_cnt = column.value_counts().iloc[:7]
-    val_cnt_norm = column.value_counts(normalize=True).iloc[:7]
+    val_cnt = column.value_counts().iloc[:8]
+    val_cnt_norm = column.value_counts(normalize=True).iloc[:8]
     column_name_pct = column_name + '_pct'
     val_cnt_norm.name = column_name_pct
 
@@ -767,13 +767,25 @@ def make_hbox(widgets_: list):
 
 def my_info(df, graphs=True, num=True, obj=True, date=True):
     '''
-    Функция выводить информацию о датафрейме
-    Четвертый столбцев (перед графиками) Value counts
-    Parameters
+    Show information about a pandas DataFrame.
+
+    This function provides a comprehensive overview of a DataFrame, including:
+    - Value counts for the fourth column (before graphs)
+    - Summary statistics and visualizations for numeric, object, and date columns
+
+    Parameters:
     df: pandas.DataFrame
-    Датафрейм с данными
+        The input DataFrame containing the data
     graphs: bool, default True
-    Если True, то выводятся графики. 
+        If True, visualizations are displayed
+    num: bool, default True
+        If True, summary statistics and visualizations are generated for numeric columns
+    obj: bool, default True
+        If True, summary statistics and visualizations are generated for object columns
+    date: bool, default True
+        If True, summary statistics and visualizations are generated for date columns
+    Return:
+        None
     '''
     if not num and not obj and not date:
         return
@@ -843,13 +855,25 @@ def my_info(df, graphs=True, num=True, obj=True, date=True):
 
 def my_info_gen(df, graphs=True, num=True, obj=True, date=True):
     '''
-    Генератор выводить информацию о датафрейме
-    Четвертый столбцев (перед графиками) Value counts
-    Parameters
+    Generates information about a pandas DataFrame.
+
+    This function provides a comprehensive overview of a DataFrame, including:
+    - Value counts for the fourth column (before graphs)
+    - Summary statistics and visualizations for numeric, object, and date columns
+
+    Parameters:
     df: pandas.DataFrame
-    Датафрейм с данными
+        The input DataFrame containing the data
     graphs: bool, default True
-    Если True, то выводятся графики. 
+        If True, visualizations are displayed
+    num: bool, default True
+        If True, summary statistics and visualizations are generated for numeric columns
+    obj: bool, default True
+        If True, summary statistics and visualizations are generated for object columns
+    date: bool, default True
+        If True, summary statistics and visualizations are generated for date columns
+    Yields:
+    A generator of widgets and visualizations for the input DataFrame
     '''
     if not num and not obj and not date:
         return
@@ -911,7 +935,7 @@ def my_info_gen(df, graphs=True, num=True, obj=True, date=True):
 def check_duplicated(df):
     '''
     Функция проверяет датафрейм на дубли.  
-    Если дубли есть, то выводит дубли.
+    Если дубли есть, то возвращает датафрейм с дублями.
     '''
     dupl = df.duplicated().sum()
     if dupl == 0:
@@ -919,21 +943,20 @@ def check_duplicated(df):
     print(f'Duplicated is {dupl} rows')
     # приводим строки к нижнему регистру, удаляем пробелы
     regex = re.compile(r'\s+')
-    display(df.applymap(lambda x: regex.sub(' ', x.lower().strip()) if isinstance(x, str) else x)
+    return (df.applymap(lambda x: regex.sub(' ', x.lower().strip()) if isinstance(x, str) else x)
             .value_counts(dropna=False)
             .to_frame()
             .sort_values(0, ascending=False)
-            .rename(columns={0: 'Count'})
-            .head(10))
+            .rename(columns={0: 'Count'}))
 
 
-def check_duplicated_combinations(df, n):
+def check_duplicated_combinations_gen(df, n=np.inf):
     '''
     Функция считает дубликаты между всеми возможными комбинациями между столбцами.
     Сначала для проверки на дубли берутся пары столбцов.  
     Затем по 3 столбца. И так все возможные комибнации.  
     Можно выбрать до какого количества комбинаций двигаться.
-    n - максимальное возможное количество столбцов в комбинациях
+    n - максимальное возможное количество столбцов в комбинациях. По умолчанию беруться все столбцы
     '''
     if n < 2:
         return
@@ -951,6 +974,7 @@ def check_duplicated_combinations(df, n):
                                                                                      }]))
     if n < 3:
         return
+    yield
     c3 = itertools.combinations(df.columns, 3)
     dupl_c3_list = []
     print(f'Group by 3 columns')
@@ -960,7 +984,7 @@ def check_duplicated_combinations(df, n):
             dupl_c3_list.append([' | '.join(c), duplicates])
     dupl_df_c3 = pd.DataFrame(dupl_c3_list)
     # разобьем таблицу на 3 части, чтобы удобнее читать
-    display(pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_c3, 3)], axis=1)
+    yield(pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_c3, 3)], axis=1)
             .style.format({1: '{:.0f}'}, na_rep='').hide_index().hide_columns())
     if n < 4:
         return
@@ -974,7 +998,7 @@ def check_duplicated_combinations(df, n):
                 dupl_cn_list.append([' | '.join(c), duplicates])
         dupl_df_cn = pd.DataFrame(dupl_cn_list)
         # разобьем таблицу на 3 части, чтобы удобнее читать
-        display(pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_cn, 2)], axis=1)
+        yield(pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_cn, 2)], axis=1)
                 .style.format({1: '{:.0f}'}, na_rep='').hide_index().hide_columns())
         if n < col_n+1:
             return
