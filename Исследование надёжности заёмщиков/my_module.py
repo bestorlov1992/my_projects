@@ -949,6 +949,21 @@ def check_duplicated(df):
             .sort_values(0, ascending=False)
             .rename(columns={0: 'Count'}))
 
+def find_columns_with_duplicates(df) -> pd.Series:
+    '''
+    Фукнция проверяет каждый столбец в таблице,  
+    если есть дубликаты, то помещает строки исходного 
+    дата фрейма с этими дубликатами в Series. 
+    Индекс - название колонки. 
+    Если нужно соеденить фреймы в один, то используем 
+    pd.concat(res.to_list())
+    '''
+    dfs_na = pd.Series(dtype=int)
+    for col in df.columns:
+        is_duplicated = df[col].duplicated()
+        if is_duplicated.any():
+            dfs_na[col] = df[is_duplicated]
+    return dfs_na
 
 def check_duplicated_combinations_gen(df, n=np.inf):
     '''
@@ -1030,7 +1045,7 @@ def check_na_in_both_columns(df, cols: list) -> pd.DataFrame:
     return df[mask]
 
 
-def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missing_values: str, category_column: str) -> pd.DataFrame:
+def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missing_values: str, category_column: str = None) -> pd.DataFrame:
     """
     Return a DataFrame with the proportion of missing values for each category.
 
@@ -1040,29 +1055,65 @@ def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missi
     category_column (str): Category column
 
     Returns:
-    pd.DataFrame: DataFrame with the proportion of missing values for each category
+    if category_column not None: retrun result for category_column
+        - pd.DataFrame: DataFrame with the proportion of missing values for each category
+    else: generator for all catogorical column in df
+        - pd.DataFrame: DataFrame with the proportion of missing values for each category
     """
-    # Create a mask to select rows with missing values in the specified column
-    mask = df[column_with_missing_values].isna()
+    if category_column:
+        # Create a mask to select rows with missing values in the specified column
+        mask = df[column_with_missing_values].isna()
+        size = df[column_with_missing_values].size
+        # Group by category and count the number of rows with missing values
+        missing_value_counts = df[mask].groupby(
+            category_column).size().reset_index(name='missing_count')
+        summ_missing_counts = missing_value_counts['missing_count'].sum()
+        # Get the total count for each category
+        total_counts = df.groupby(
+            category_column).size().reset_index(name='total_count')
 
-    # Group by category and count the number of rows with missing values
-    missing_value_counts = df[mask].groupby(
-        category_column).size().reset_index(name='missing_count')
-    summ_missing_counts = missing_value_counts['missing_count'].sum()
-    # Get the total count for each category
-    total_counts = df.groupby(
-        category_column).size().reset_index(name='total_count')
+        # Merge the two DataFrames to calculate the proportion of missing values
+        result_df = pd.merge(missing_value_counts,
+                            total_counts, on=category_column)
+        result_df['missing_value_in_category_pct'] = (
+            result_df['missing_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+        result_df['missing_value_in_column_pct'] = (
+            result_df['missing_count'] / summ_missing_counts).apply(lambda x: f'{x:.1%}')
+        result_df['total_count_pct'] = (
+            result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
+        # Return the result DataFrame
+        yield (result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct', 'total_count_pct']]\
+            .style.set_caption(f'Missing values in "{column_with_missing_values}" by categroy "{category_column}"').set_table_styles([{'selector': 'caption',
+                                                                                     'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])                                                                               
+        )
+    else:
+        categroy_columns = [
+            col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+        for category_column in categroy_columns:
+            # Create a mask to select rows with missing values in the specified column
+            mask = df[column_with_missing_values].isna()
+            size = df[column_with_missing_values].size
+            # Group by category and count the number of rows with missing values
+            missing_value_counts = df[mask].groupby(
+                category_column).size().reset_index(name='missing_count')
+            summ_missing_counts = missing_value_counts['missing_count'].sum()
+            # Get the total count for each category
+            total_counts = df.groupby(
+                category_column).size().reset_index(name='total_count')
 
-    # Merge the two DataFrames to calculate the proportion of missing values
-    result_df = pd.merge(missing_value_counts,
-                         total_counts, on=category_column)
-    result_df['missing_value_in_category_pct'] = (
-        result_df['missing_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
-    result_df['missing_value_in_column_pct'] = (
-        result_df['missing_count'] / summ_missing_counts).apply(lambda x: f'{x:.1%}')
-    # Return the result DataFrame
-    return result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct']]
-
+            # Merge the two DataFrames to calculate the proportion of missing values
+            result_df = pd.merge(missing_value_counts,
+                                total_counts, on=category_column)
+            result_df['missing_value_in_category_pct'] = (
+                result_df['missing_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+            result_df['missing_value_in_column_pct'] = (
+                result_df['missing_count'] / summ_missing_counts).apply(lambda x: f'{x:.1%}')
+            result_df['total_count_pct'] = (
+                result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
+            # Return the result DataFrame
+            yield result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct', 'total_count_pct']]\
+            .style.set_caption(f'Missing values in "{column_with_missing_values}" by categroy "{category_column}"').set_table_styles([{'selector': 'caption',
+                                                                                     'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
 
 def get_duplicates_value_proportion_by_category(df: pd.DataFrame, column_with_dublicated_values: str, category_column: str) -> pd.DataFrame:
     """
@@ -1271,7 +1322,7 @@ def fill_missing_values_using_helper_column(df, categorical_column, helper_colum
     return filled_df
 
 
-def get_outlier_quantile_proportion_by_category(df: pd.DataFrame, column_with_outliers: str, category_column: str, lower_quantile: float = 0.05, upper_quantile: float = 0.95) -> None:
+def get_outlier_quantile_proportion_by_category(df: pd.DataFrame, column_with_outliers: str, category_column: str = None, lower_quantile: float = 0.05, upper_quantile: float = 0.95) -> None:
     """
     Return a DataFrame with the proportion of outliers for each category.
 
@@ -1292,28 +1343,58 @@ def get_outlier_quantile_proportion_by_category(df: pd.DataFrame, column_with_ou
     # Create a mask to select rows with outliers in the specified column
     mask = (df[column_with_outliers] < lower_bound) | (
         df[column_with_outliers] > upper_bound)
+    size = df[column_with_outliers].size
+    if category_column:
+        # Group by category and count the number of rows with outliers
+        outlier_counts = df[mask].groupby(
+            category_column).size().reset_index(name='outlier_count')
+        summ_outlier_counts = outlier_counts['outlier_count'].sum()
+        # Get the total count for each category
+        total_counts = df.groupby(
+            category_column).size().reset_index(name='total_count')
 
-    # Group by category and count the number of rows with outliers
-    outlier_counts = df[mask].groupby(
-        category_column).size().reset_index(name='outlier_count')
-    summ_outlier_counts = outlier_counts['outlier_count'].sum()
-    # Get the total count for each category
-    total_counts = df.groupby(
-        category_column).size().reset_index(name='total_count')
+        # Merge the two DataFrames to calculate the proportion of outliers
+        result_df = pd.merge(outlier_counts,
+                            total_counts, on=category_column)
+        result_df['outlier_in_category_pct'] = (
+            result_df['outlier_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+        result_df['outlier_in_column_pct'] = (
+            result_df['outlier_count'] / summ_outlier_counts).apply(lambda x: f'{x:.1%}')
+        result_df['total_count_pct'] = (
+            result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
+        display(result_df[[category_column, 'total_count', 'outlier_count', 'outlier_in_category_pct', 'outlier_in_column_pct', 'total_count_pct']].style
+                .set_caption(f'Outliers in "{column_with_outliers}" by category "{category_column}"')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                .hide_index())
+        yield
+    else:
+        categroy_columns = [
+            col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+        for category_column in categroy_columns:        
+            # Group by category and count the number of rows with outliers
+            outlier_counts = df[mask].groupby(
+                category_column).size().reset_index(name='outlier_count')
+            summ_outlier_counts = outlier_counts['outlier_count'].sum()
+            # Get the total count for each category
+            total_counts = df.groupby(
+                category_column).size().reset_index(name='total_count')
 
-    # Merge the two DataFrames to calculate the proportion of outliers
-    result_df = pd.merge(outlier_counts,
-                         total_counts, on=category_column)
-    result_df['outlier_in_category_pct'] = (
-        result_df['outlier_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
-    result_df['outlier_in_column_pct'] = (
-        result_df['outlier_count'] / summ_outlier_counts).apply(lambda x: f'{x:.1%}')
-    display(result_df[[category_column, 'total_count', 'outlier_count', 'outlier_in_category_pct', 'outlier_in_column_pct']].style
-            .set_caption(f'Outliers in "{column_with_outliers}" by category "{category_column}"')
-            .set_table_styles([{'selector': 'caption',
-                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
-            .hide_index())
-
+            # Merge the two DataFrames to calculate the proportion of outliers
+            result_df = pd.merge(outlier_counts,
+                                total_counts, on=category_column)
+            result_df['outlier_in_category_pct'] = (
+                result_df['outlier_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+            result_df['outlier_in_column_pct'] = (
+                result_df['outlier_count'] / summ_outlier_counts).apply(lambda x: f'{x:.1%}')
+            result_df['total_count_pct'] = (
+                result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
+            display(result_df[[category_column, 'total_count', 'outlier_count', 'outlier_in_category_pct', 'outlier_in_column_pct', 'total_count_pct']].style
+                    .set_caption(f'Outliers in "{column_with_outliers}" by category "{category_column}"')
+                    .set_table_styles([{'selector': 'caption',
+                                        'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                    .hide_index())
+            yield
 
 def get_outlier_proportion_by_category_modified_z_score(df: pd.DataFrame, column_with_outliers: str, category_column: str, threshold: float = 3.5) -> None:
     """
