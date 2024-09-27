@@ -27,16 +27,12 @@ import pingouin as pg
 import warnings
 
 colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
-                     '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4'
-                     , 'rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
+                     '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4', 'rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4']
 colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
-                    , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
-                    , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
-                    , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2']
 colorway_for_treemap = [
     'rgba(148, 100, 170, 1)',
@@ -48,7 +44,7 @@ colorway_for_treemap = [
     'rgba(217, 119, 136, 1)',
     'rgba(64, 134, 87, 1)',
     'rgba(134, 96, 147, 1)',
-        'rgba(132, 169, 233, 1)']
+    'rgba(132, 169, 233, 1)']
 # default setting for Plotly
 # for line plot
 pio.templates["custom_theme_for_line"] = go.layout.Template(
@@ -145,10 +141,9 @@ def make_widget_all_frame(df):
         else:
             duplicates_pct = round(duplicates_pct)
         duplicates = f'{duplicates} ({duplicates_pct}%)'
-    regex = re.compile(r'\s+')
     dupl_keep_false = df.duplicated(keep=False).sum()
-    dupl_sub = df.applymap(lambda x: regex.sub(' ', x.lower().strip()) if isinstance(
-        x, str) else x).duplicated(keep=False).sum()
+    dupl_sub = df.apply(lambda x: x.str.lower().str.strip().str.replace(
+        r'\s+', ' ', regex=True) if x.dtype == 'object' else x).duplicated(keep=False).sum()
     duplicates_sub_minis_origin = pretty_value(dupl_sub - dupl_keep_false)
     duplicates_sub_minis_origin_pct = (
         dupl_sub - dupl_keep_false) * 100 / dupl
@@ -659,10 +654,9 @@ def make_widget_summary_obj(column):
         else:
             duplicates_pct = round(duplicates_pct)
         duplicates = f'{duplicates} ({duplicates_pct}%)'
-        regex = re.compile(r'\s+')
         duplicates_keep_false = column.duplicated(keep=False).sum()
-        duplicates_sub = column.apply(lambda x: regex.sub(' ', x.lower(
-        ).strip()) if isinstance(x, str) else x).duplicated(keep=False).sum()
+        duplicates_sub = column.str.lower().str.strip().str.replace(
+            r'\s+', ' ', regex=True).duplicated(keep=False).sum()
         duplicates_sub_minis_origin = duplicates_sub - duplicates_keep_false
         if duplicates_sub_minis_origin == 0:
             duplicates_sub_minis_origin = '---'
@@ -938,16 +932,17 @@ def check_duplicated(df):
     Если дубли есть, то возвращает датафрейм с дублями.
     '''
     dupl = df.duplicated().sum()
+    size = df.shape[0]
     if dupl == 0:
         return 'no duplicates'
-    print(f'Duplicated is {dupl} rows')
+    print(f'Duplicated is {dupl} ({(dupl / size):.1%}) rows')
     # приводим строки к нижнему регистру, удаляем пробелы
-    regex = re.compile(r'\s+')
-    return (df.applymap(lambda x: regex.sub(' ', x.lower().strip()) if isinstance(x, str) else x)
+    return (df.apply(lambda x: x.str.lower().str.strip().str.replace(r'\s+', ' ', regex=True) if x.dtype == 'object' else x)
             .value_counts(dropna=False)
             .to_frame()
             .sort_values(0, ascending=False)
             .rename(columns={0: 'Count'}))
+
 
 def find_columns_with_duplicates(df) -> pd.Series:
     '''
@@ -958,12 +953,21 @@ def find_columns_with_duplicates(df) -> pd.Series:
     Если нужно соеденить фреймы в один, то используем 
     pd.concat(res.to_list())
     '''
-    dfs_na = pd.Series(dtype=int)
+    dfs_duplicated = pd.Series(dtype=int)
+    cnt_duplicated = pd.Series(dtype=int)
+    size = df.shape[0]
     for col in df.columns:
         is_duplicated = df[col].duplicated()
         if is_duplicated.any():
-            dfs_na[col] = df[is_duplicated]
-    return dfs_na
+            dfs_duplicated[col] = df[is_duplicated]
+            cnt_duplicated[col] = dfs_duplicated[col].shape[0]
+    display(cnt_duplicated.apply(lambda x: f'{x} ({(x / size):.2%})').to_frame().style
+            .set_caption('Duplicates')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_columns())
+    return dfs_duplicated
+
 
 def check_duplicated_combinations_gen(df, n=np.inf):
     '''
@@ -975,9 +979,8 @@ def check_duplicated_combinations_gen(df, n=np.inf):
     '''
     if n < 2:
         return
-    regex = re.compile(r'\s+')
-    df_copy = df.applymap(lambda x: regex.sub(
-        ' ', x.lower().strip()) if isinstance(x, str) else x)
+    df_copy = df.apply(lambda x: x.str.lower().str.strip().str.replace(
+        r'\s+', ' ', regex=True) if x.dtype == 'object' else x)
     c2 = itertools.combinations(df.columns, 2)
     dupl_df_c2 = pd.DataFrame([], index=df.columns, columns=df.columns)
     print(f'Group by 2 columns')
@@ -999,8 +1002,8 @@ def check_duplicated_combinations_gen(df, n=np.inf):
             dupl_c3_list.append([' | '.join(c), duplicates])
     dupl_df_c3 = pd.DataFrame(dupl_c3_list)
     # разобьем таблицу на 3 части, чтобы удобнее читать
-    yield(pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_c3, 3)], axis=1)
-            .style.format({1: '{:.0f}'}, na_rep='').hide_index().hide_columns())
+    yield (pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_c3, 3)], axis=1)
+           .style.format({1: '{:.0f}'}, na_rep='').hide_index().hide_columns())
     if n < 4:
         return
     for col_n in range(4, df.columns.size + 1):
@@ -1013,8 +1016,8 @@ def check_duplicated_combinations_gen(df, n=np.inf):
                 dupl_cn_list.append([' | '.join(c), duplicates])
         dupl_df_cn = pd.DataFrame(dupl_cn_list)
         # разобьем таблицу на 3 части, чтобы удобнее читать
-        yield(pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_cn, 2)], axis=1)
-                .style.format({1: '{:.0f}'}, na_rep='').hide_index().hide_columns())
+        yield (pd.concat([part_df.reset_index(drop=True) for part_df in np.array_split(dupl_df_cn, 2)], axis=1)
+               .style.format({1: '{:.0f}'}, na_rep='').hide_index().hide_columns())
         if n < col_n+1:
             return
 
@@ -1029,10 +1032,18 @@ def find_columns_with_missing_values(df) -> pd.Series:
     pd.concat(res.to_list())
     '''
     dfs_na = pd.Series(dtype=int)
+    cnt_missing = pd.Series(dtype=int)
+    size = df.shape[0]
     for col in df.columns:
         is_na = df[col].isna()
         if is_na.any():
             dfs_na[col] = df[is_na]
+            cnt_missing[col] = dfs_na[col].shape[0]
+    display(cnt_missing.apply(lambda x: f'{x} ({(x / size):.2%})').to_frame().style
+            .set_caption('Missings')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_columns())
     return dfs_na
 
 
@@ -1041,8 +1052,12 @@ def check_na_in_both_columns(df, cols: list) -> pd.DataFrame:
     Фукнция проверяет есть ли пропуски одновременно во всех указанных столбцах
     и возвращает датафрейм только со строками, в которых пропуски одновременно во всех столбцах
     '''
+    size = df.shape[0]
     mask = df[cols].isna().all(axis=1)
-    return df[mask]
+    na_df = df[mask]
+    print(
+        f'{na_df.shape[0]} ({(na_df.shape[0] / size):.2%}) rows with missings simultaneously in {cols}')
+    return na_df
 
 
 def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missing_values: str, category_column: str = None) -> pd.DataFrame:
@@ -1074,7 +1089,7 @@ def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missi
 
         # Merge the two DataFrames to calculate the proportion of missing values
         result_df = pd.merge(missing_value_counts,
-                            total_counts, on=category_column)
+                             total_counts, on=category_column)
         result_df['missing_value_in_category_pct'] = (
             result_df['missing_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
         result_df['missing_value_in_column_pct'] = (
@@ -1082,10 +1097,11 @@ def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missi
         result_df['total_count_pct'] = (
             result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
         # Return the result DataFrame
-        yield (result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct', 'total_count_pct']]\
-            .style.set_caption(f'Missing values in "{column_with_missing_values}" by categroy "{category_column}"').set_table_styles([{'selector': 'caption',
-                                                                                     'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])                                                                               
-        )
+        display(result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct', 'total_count_pct']]
+                .style.set_caption(f'Missing values in "{column_with_missing_values}" by categroy "{category_column}"').set_table_styles([{'selector': 'caption',
+                                                                                                                                           'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                )
+        yield
     else:
         categroy_columns = [
             col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
@@ -1103,7 +1119,7 @@ def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missi
 
             # Merge the two DataFrames to calculate the proportion of missing values
             result_df = pd.merge(missing_value_counts,
-                                total_counts, on=category_column)
+                                 total_counts, on=category_column)
             result_df['missing_value_in_category_pct'] = (
                 result_df['missing_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
             result_df['missing_value_in_column_pct'] = (
@@ -1111,9 +1127,26 @@ def get_missing_value_proportion_by_category(df: pd.DataFrame, column_with_missi
             result_df['total_count_pct'] = (
                 result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
             # Return the result DataFrame
-            yield result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct', 'total_count_pct']]\
-            .style.set_caption(f'Missing values in "{column_with_missing_values}" by categroy "{category_column}"').set_table_styles([{'selector': 'caption',
-                                                                                     'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            display(result_df[[category_column, 'total_count', 'missing_count', 'missing_value_in_category_pct', 'missing_value_in_column_pct', 'total_count_pct']]
+                    .style.set_caption(f'Missing values in "{column_with_missing_values}" by categroy "{category_column}"').set_table_styles([{'selector': 'caption',
+                                                                                                                                               'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}]))
+            yield
+
+
+def missings_by_category_gen(df, series_missed):
+    '''
+    Генератор.
+    Для каждой колонки в series_missed функция выводит выборку датафрейма с пропусками в этой колонке.  
+    И затем выводит информацию о пропусках по каждой категории в таблице.
+    '''
+    for col in series_missed.index:
+        display(series_missed[col].sample(10).style.set_caption(f'Sample missings in {col}').set_table_styles([{'selector': 'caption',
+                                                                                                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}]))
+        yield
+        gen = get_missing_value_proportion_by_category(df, col)
+        for _ in gen:
+            yield
+
 
 def get_duplicates_value_proportion_by_category(df: pd.DataFrame, column_with_dublicated_values: str, category_column: str) -> pd.DataFrame:
     """
@@ -1225,21 +1258,25 @@ def fill_na_with_function_by_categories(df, category_columns, value_column, func
     (can be a string, e.g. "mean", or a callable function that returns a single number)
 
     Returns:
-    pandas.DataFrame: modified DataFrame with filled missing values
+    pd.Series: Modified column with filled missing values
     """
+    if not all(col in df.columns for col in category_columns):
+        raise ValueError("Invalid category column(s). Column must be in df")
+    if value_column not in df.columns:
+        raise ValueError("Invalid value column. Column must be in df")
+
     available_funcs = {'median', 'mean', 'max', 'min'}
 
     if isinstance(func, str):
         if func not in available_funcs:
             raise ValueError(f"Unknown function: {func}")
         # If func is a string, use the corresponding pandas method
-        df[value_column] = df.groupby(category_columns)[value_column].transform(
+        return df.groupby(category_columns)[value_column].transform(
             lambda x: x.fillna(x.apply(func)))
     else:
         # If func is a callable, apply it to each group of values
-        df[value_column] = df.groupby(category_columns)[
+        return df.groupby(category_columns)[
             value_column].transform(lambda x: x.fillna(func(x)))
-    return df
 
 
 def detect_outliers_Zscore(df: pd.DataFrame, z_level: float = 3.5) -> pd.Series:
@@ -1283,16 +1320,17 @@ def detect_outliers_quantile(df: pd.DataFrame, lower_quantile: float = 0.05, upp
     """
     outliers = pd.Series(dtype=object)
     cnt_outliers = pd.Series(dtype=int)
+    size = df.shape[0]
     for col in filter(lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns):
         lower_bound = df[col].quantile(lower_quantile)
         upper_bound = df[col].quantile(upper_quantile)
         outliers[col] = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
         cnt_outliers[col] = outliers[col].shape[0]
-    display(cnt_outliers.to_frame().T.style
+    display(cnt_outliers.apply(lambda x: f'{x} ({(x / size):.2%})').to_frame().style
             .set_caption('Outliers')
             .set_table_styles([{'selector': 'caption',
                                 'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
-            .hide_index())
+            .hide_columns())
     return outliers
 
 
@@ -1355,7 +1393,7 @@ def get_outlier_quantile_proportion_by_category(df: pd.DataFrame, column_with_ou
 
         # Merge the two DataFrames to calculate the proportion of outliers
         result_df = pd.merge(outlier_counts,
-                            total_counts, on=category_column)
+                             total_counts, on=category_column)
         result_df['outlier_in_category_pct'] = (
             result_df['outlier_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
         result_df['outlier_in_column_pct'] = (
@@ -1371,7 +1409,7 @@ def get_outlier_quantile_proportion_by_category(df: pd.DataFrame, column_with_ou
     else:
         categroy_columns = [
             col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
-        for category_column in categroy_columns:        
+        for category_column in categroy_columns:
             # Group by category and count the number of rows with outliers
             outlier_counts = df[mask].groupby(
                 category_column).size().reset_index(name='outlier_count')
@@ -1382,7 +1420,7 @@ def get_outlier_quantile_proportion_by_category(df: pd.DataFrame, column_with_ou
 
             # Merge the two DataFrames to calculate the proportion of outliers
             result_df = pd.merge(outlier_counts,
-                                total_counts, on=category_column)
+                                 total_counts, on=category_column)
             result_df['outlier_in_category_pct'] = (
                 result_df['outlier_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
             result_df['outlier_in_column_pct'] = (
@@ -1395,6 +1433,29 @@ def get_outlier_quantile_proportion_by_category(df: pd.DataFrame, column_with_ou
                                         'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
                     .hide_index())
             yield
+
+
+def outliers_by_category_gen(df, series_outliers, lower_quantile: float = 0.05, upper_quantile: float = 0.95):
+    '''
+    Генератор.
+    Для каждой колонки в series_outliers функция выводит выборку датафрейма с выбросами (определяется по квантилям) в этой колонке.  
+    И затем выводит информацию о выбросах по каждой категории в таблице.
+    '''
+    for col in series_outliers.index:
+        print(f'Value counts outliers')
+        display(series_outliers[col][col].value_counts().to_frame('outliers').head(10).style.set_caption(f'{col}')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]
+                                    }]))
+        yield
+        display(series_outliers[col].sample(10).style.set_caption(f'Sample outliers in {col}').set_table_styles([{'selector': 'caption',
+                                                                                                                  'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}]))
+        yield
+        gen = get_outlier_quantile_proportion_by_category(
+            df, col, lower_quantile=lower_quantile, upper_quantile=upper_quantile)
+        for _ in gen:
+            yield
+
 
 def get_outlier_proportion_by_category_modified_z_score(df: pd.DataFrame, column_with_outliers: str, category_column: str, threshold: float = 3.5) -> None:
     """
@@ -1439,6 +1500,240 @@ def get_outlier_proportion_by_category_modified_z_score(df: pd.DataFrame, column
             .set_table_styles([{'selector': 'caption',
                                 'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
             .hide_index())
+
+
+def find_columns_with_negative_values(df) -> pd.Series:
+    '''
+    Фукнция проверяет каждый столбец в таблице,  
+    если есть отрицательные значения, то помещает строки исходного 
+    дата фрейма с этими значениями в Series. 
+    Индекс - название колонки. 
+    Если нужно соеденить фреймы в один, то используем 
+    pd.concat(res.to_list())
+    '''
+    dfs_na = pd.Series(dtype=int)
+    cnt_negative = pd.Series(dtype=int)
+    size = df.shape[0]
+    num_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    for col in num_columns:
+        is_negative = df[col] < 0
+        if is_negative.any():
+            dfs_na[col] = df[is_negative]
+            cnt_negative[col] = dfs_na[col].shape[0]
+    display(cnt_negative.apply(lambda x: f'{x} ({(x / size):.2%})').to_frame().style
+            .set_caption('Negative')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_columns())
+    return dfs_na
+
+
+def get_negative_proportion_by_category(df: pd.DataFrame, column_with_negative: str, category_column: str = None) -> None:
+    """
+    Return a DataFrame with the proportion of negative value for each category.
+
+    Parameters:
+    df (pd.DataFrame): Input DataFrame
+    column_with_negative (str): Column with negative value
+    category_column (str): Category column
+
+    Returns:
+    None
+    """
+
+    # Create a mask to select rows with outliers in the specified column
+    mask = df[column_with_negative] < 0
+    size = df[column_with_negative].size
+    if category_column:
+        # Group by category and count the number of rows with outliers
+        negative_counts = df[mask].groupby(
+            category_column).size().reset_index(name='negative_count')
+        summ_negative_counts = negative_counts['negative_count'].sum()
+        # Get the total count for each category
+        total_counts = df.groupby(
+            category_column).size().reset_index(name='total_count')
+
+        # Merge the two DataFrames to calculate the proportion of negatives
+        result_df = pd.merge(negative_counts,
+                             total_counts, on=category_column)
+        result_df['negative_in_category_pct'] = (
+            result_df['negative_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+        result_df['negative_in_column_pct'] = (
+            result_df['negative_count'] / summ_negative_counts).apply(lambda x: f'{x:.1%}')
+        result_df['total_count_pct'] = (
+            result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
+        display(result_df[[category_column, 'total_count', 'negative_count', 'negative_in_category_pct', 'negative_in_column_pct', 'total_count_pct']].style
+                .set_caption(f'negatives in "{column_with_negative}" by category "{category_column}"')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                .hide_index())
+        yield
+    else:
+        categroy_columns = [
+            col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+        for category_column in categroy_columns:
+            # Group by category and count the number of rows with negatives
+            negative_counts = df[mask].groupby(
+                category_column).size().reset_index(name='negative_count')
+            summ_negative_counts = negative_counts['negative_count'].sum()
+            # Get the total count for each category
+            total_counts = df.groupby(
+                category_column).size().reset_index(name='total_count')
+
+            # Merge the two DataFrames to calculate the proportion of negatives
+            result_df = pd.merge(negative_counts,
+                                 total_counts, on=category_column)
+            result_df['negative_in_category_pct'] = (
+                result_df['negative_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+            result_df['negative_in_column_pct'] = (
+                result_df['negative_count'] / summ_negative_counts).apply(lambda x: f'{x:.1%}')
+            result_df['total_count_pct'] = (
+                result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
+            display(result_df[[category_column, 'total_count', 'negative_count', 'negative_in_category_pct', 'negative_in_column_pct', 'total_count_pct']].style
+                    .set_caption(f'negatives in "{column_with_negative}" by category "{category_column}"')
+                    .set_table_styles([{'selector': 'caption',
+                                        'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                    .hide_index())
+            yield
+
+
+def negative_by_category_gen(df, series_negative):
+    '''
+    Генератор.
+    Для каждой колонки в series_negative функция выводит выборку датафрейма с отрицательными значениями.  
+    И затем выводит информацию об отрицательных значениях по каждой категории в таблице.
+    '''
+    for col in series_negative.index:
+        print(f'Value counts negative')
+        display(series_negative[col][col].value_counts().to_frame('negative').head(10).style.set_caption(f'{col}')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]
+                                    }]))
+        yield
+        display(series_negative[col].sample(10).style.set_caption(f'Sample negative in {col}').set_table_styles([{'selector': 'caption',
+                                                                                                                  'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}]))
+        yield
+        gen = get_negative_proportion_by_category(df, col)
+        for _ in gen:
+            yield
+
+
+def find_columns_with_zeros_values(df) -> pd.Series:
+    '''
+    Фукнция проверяет каждый столбец в таблице,  
+    если есть нулевые значения, то помещает строки исходного 
+    дата фрейма с этими значениями в Series. 
+    Индекс - название колонки. 
+    Если нужно соеденить фреймы в один, то используем 
+    pd.concat(res.to_list())
+    '''
+    dfs_na = pd.Series(dtype=int)
+    cnt_zeros = pd.Series(dtype=int)
+    size = df.shape[0]
+    num_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    for col in num_columns:
+        is_zeros = df[col] == 0
+        if is_zeros.any():
+            dfs_na[col] = df[is_zeros]
+            cnt_zeros[col] = dfs_na[col].shape[0]
+    display(cnt_zeros.apply(lambda x: f'{x} ({(x / size):.2%})').to_frame().style
+            .set_caption('Zeros')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_columns())
+    return dfs_na
+
+
+def get_zeros_proportion_by_category(df: pd.DataFrame, column_with_zeros: str, category_column: str = None) -> None:
+    """
+    Return a DataFrame with the proportion of zeros value for each category.
+
+    Parameters:
+    df (pd.DataFrame): Input DataFrame
+    column_with_zeros (str): Column with zeros value
+    category_column (str): Category column
+
+    Returns:
+    None
+    """
+
+    # Create a mask to select rows with outliers in the specified column
+    mask = df[column_with_zeros] == 0
+    size = df[column_with_zeros].size
+    if category_column:
+        # Group by category and count the number of rows with outliers
+        zeros_counts = df[mask].groupby(
+            category_column).size().reset_index(name='zeros_count')
+        summ_zeros_counts = zeros_counts['zeros_count'].sum()
+        # Get the total count for each category
+        total_counts = df.groupby(
+            category_column).size().reset_index(name='total_count')
+
+        # Merge the two DataFrames to calculate the proportion of zeross
+        result_df = pd.merge(zeros_counts,
+                             total_counts, on=category_column)
+        result_df['zeros_in_category_pct'] = (
+            result_df['zeros_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+        result_df['zeros_in_column_pct'] = (
+            result_df['zeros_count'] / summ_zeros_counts).apply(lambda x: f'{x:.1%}')
+        result_df['total_count_pct'] = (
+            result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
+        display(result_df[[category_column, 'total_count', 'zeros_count', 'zeros_in_category_pct', 'zeros_in_column_pct', 'total_count_pct']].style
+                .set_caption(f'zeros in "{column_with_zeros}" by category "{category_column}"')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                .hide_index())
+        yield
+    else:
+        categroy_columns = [
+            col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+        for category_column in categroy_columns:
+            # Group by category and count the number of rows with zeross
+            zeros_counts = df[mask].groupby(
+                category_column).size().reset_index(name='zeros_count')
+            summ_zeros_counts = zeros_counts['zeros_count'].sum()
+            # Get the total count for each category
+            total_counts = df.groupby(
+                category_column).size().reset_index(name='total_count')
+
+            # Merge the two DataFrames to calculate the proportion of zeross
+            result_df = pd.merge(zeros_counts,
+                                 total_counts, on=category_column)
+            result_df['zeros_in_category_pct'] = (
+                result_df['zeros_count'] / result_df['total_count']).apply(lambda x: f'{x:.1%}')
+            result_df['zeros_in_column_pct'] = (
+                result_df['zeros_count'] / summ_zeros_counts).apply(lambda x: f'{x:.1%}')
+            result_df['total_count_pct'] = (
+                result_df['total_count'] / size).apply(lambda x: f'{x:.1%}')
+            display(result_df[[category_column, 'total_count', 'zeros_count', 'zeros_in_category_pct', 'zeros_in_column_pct', 'total_count_pct']].style
+                    .set_caption(f'zeros in "{column_with_zeros}" by category "{category_column}"')
+                    .set_table_styles([{'selector': 'caption',
+                                        'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                    .hide_index())
+            yield
+
+
+def zeros_by_category_gen(df, series_zeros):
+    '''
+    Генератор.
+    Для каждой колонки в series_zeros функция выводит выборку датафрейма с нулевыми значениями.  
+    И затем выводит информацию об нулевых значениях по каждой категории в таблице.
+    '''
+    for col in series_zeros.index:
+        print(f'Value counts zeros')
+        display(series_zeros[col][col].value_counts().to_frame('zeros').head(10).style.set_caption(f'{col}')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]
+                                    }]))
+        yield
+        display(series_zeros[col].sample(10).style.set_caption(f'Sample zeros in {col}').set_table_styles([{'selector': 'caption',
+                                                                                                            'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}]))
+        yield
+        gen = get_zeros_proportion_by_category(df, col)
+        for _ in gen:
+            yield
 
 
 def merge_duplicates(df, duplicate_column, merge_functions):
@@ -1734,7 +2029,7 @@ def heatmap(df, title='', xtick_text=None, ytick_text=None, xaxis_label=None, ya
             showarrow=False,
             font=dict(
                 color="black" if df.values[row, col] <
-                    center_color_bar else "white",
+                center_color_bar else "white",
                 size=font_size
             )
         )
@@ -1968,6 +2263,7 @@ def categorical_heatmap_matrix_gen(df):
         fig.show()
         yield
 
+
 def treemap_dash(df, columns):
     """
     Создает интерактивный treemap с помощью Dash и Plotly.
@@ -1980,7 +2276,7 @@ def treemap_dash(df, columns):
     app (dash.Dash): прилоожение Dash с интерактивным treemap.
     """
     date_columns = filter(
-            lambda x: pd.api.types.is_datetime64_any_dtype(df[x]), df.columns)
+        lambda x: pd.api.types.is_datetime64_any_dtype(df[x]), df.columns)
     app = dash.Dash(__name__)
 
     app.layout = html.Div([
@@ -2010,13 +2306,15 @@ def treemap_dash(df, columns):
                              'rgba(64, 134, 87, 1)',
                              'rgba(134, 96, 147, 1)',
                              'rgba(132, 169, 233, 1)'
-                         ])
-        fig.update_traces(root_color="lightgrey", hovertemplate="<b>%{label}<br>%{value}</b>")
+        ])
+        fig.update_traces(root_color="lightgrey",
+                          hovertemplate="<b>%{label}<br>%{value}</b>")
         fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
         fig.update_traces(hoverlabel=dict(bgcolor="white"))
         return fig
 
     return app
+
 
 def treemap(df, columns, values=None):
     """
@@ -2029,24 +2327,24 @@ def treemap(df, columns, values=None):
     Returns:
     fig (plotly.graph_objs.Figure): interactive treemap figure.
     """
-    fig = px.treemap(df, path=[px.Constant('All')] + columns
-                     , values = values
-                     , color_discrete_sequence=[
-                         'rgba(148, 100, 170, 1)',
-                         'rgba(50, 156, 179, 1)',
-                         'rgba(99, 113, 156, 1)',
-                         'rgba(92, 107, 192, 1)',
-                         'rgba(0, 90, 91, 1)',
-                         'rgba(3, 169, 244, 1)',
-                         'rgba(217, 119, 136, 1)',
-                         'rgba(64, 134, 87, 1)',
-                         'rgba(134, 96, 147, 1)',
-                         'rgba(132, 169, 233, 1)'
-                     ])
-    fig.update_traces(root_color="silver", hovertemplate="<b>%{label}<br>%{value:.2f}</b>")
+    fig = px.treemap(df, path=[px.Constant('All')] + columns, values=values, color_discrete_sequence=[
+        'rgba(148, 100, 170, 1)',
+        'rgba(50, 156, 179, 1)',
+        'rgba(99, 113, 156, 1)',
+        'rgba(92, 107, 192, 1)',
+        'rgba(0, 90, 91, 1)',
+        'rgba(3, 169, 244, 1)',
+        'rgba(217, 119, 136, 1)',
+        'rgba(64, 134, 87, 1)',
+        'rgba(134, 96, 147, 1)',
+        'rgba(132, 169, 233, 1)'
+    ])
+    fig.update_traces(root_color="silver",
+                      hovertemplate="<b>%{label}<br>%{value:.2f}</b>")
     fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
     fig.update_traces(hoverlabel=dict(bgcolor="white"))
     return fig
+
 
 def treemap_dash(df):
     """
@@ -2058,7 +2356,7 @@ def treemap_dash(df):
 
     Возвращает:
     app (dash.Dash): прилоожение Dash с интерактивным treemap.
-    
+
     ```
     app = treemap_dash(df)
     if __name__ == '__main__':
@@ -2096,13 +2394,15 @@ def treemap_dash(df):
                              'rgba(64, 134, 87, 1)',
                              'rgba(134, 96, 147, 1)',
                              'rgba(132, 169, 233, 1)'
-                         ])
-        fig.update_traces(root_color="lightgrey", hovertemplate="<b>%{label}<br>%{value}</b>")
+        ])
+        fig.update_traces(root_color="lightgrey",
+                          hovertemplate="<b>%{label}<br>%{value}</b>")
         fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
         fig.update_traces(hoverlabel=dict(bgcolor="white"))
         return fig
 
     return app
+
 
 def parallel_categories(df, columns):
     """
@@ -2119,11 +2419,11 @@ def parallel_categories(df, columns):
     color_values = [1 for _ in range(df.shape[0])]
 
     # Создание параллельных категорий
-    fig = px.parallel_categories(df, dimensions=columns, color=color_values, 
-                                 color_continuous_scale = [
-                                [0, 'rgba(128, 60, 170, 0.9)'],
-                                [1, 'rgba(128, 60, 170, 0.9)']]
-    )
+    fig = px.parallel_categories(df, dimensions=columns, color=color_values,
+                                 color_continuous_scale=[
+                                     [0, 'rgba(128, 60, 170, 0.9)'],
+                                     [1, 'rgba(128, 60, 170, 0.9)']]
+                                 )
 
     # Скрытие цветовой шкалы
     if fig.layout.coloraxis:
@@ -2136,6 +2436,7 @@ def parallel_categories(df, columns):
 
     return fig
 
+
 def parallel_categories_dash(df):
     """
     Creates a Dash application with an interactive parallel_categories using Plotly.
@@ -2145,7 +2446,7 @@ def parallel_categories_dash(df):
 
     Returns:
     app (dash.Dash): Dash application with interactive parallel_categories figure.
-        
+
     ```
     app = treemap_dash(df)
     if __name__ == '__main__':
@@ -2156,7 +2457,6 @@ def parallel_categories_dash(df):
         col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
     # Создание Dash-приложения
     app = dash.Dash(__name__)
-
 
     app.layout = html.Div([
         # html.H1('Parallel Categories'),
@@ -2177,11 +2477,11 @@ def parallel_categories_dash(df):
     def update_graph(selected_columns):
         # Создание параллельных категорий
         color_values = [1 for _ in range(df.shape[0])]
-        fig = px.parallel_categories(df, dimensions=selected_columns, color=color_values, 
-                                    color_continuous_scale = [
-                                    [0, 'rgba(128, 60, 170, 0.7)'],
-                                    [1, 'rgba(128, 60, 170, 0.7)']]
-        )
+        fig = px.parallel_categories(df, dimensions=selected_columns, color=color_values,
+                                     color_continuous_scale=[
+                                         [0, 'rgba(128, 60, 170, 0.7)'],
+                                         [1, 'rgba(128, 60, 170, 0.7)']]
+                                     )
 
         # Скрытие цветовой шкалы
         if fig.layout.coloraxis:
@@ -2195,6 +2495,7 @@ def parallel_categories_dash(df):
         return fig
 
     return app
+
 
 def sankey(df, columns, values_column=None, func='sum', mode='fig'):
     """
@@ -2222,17 +2523,19 @@ def sankey(df, columns, values_column=None, func='sum', mode='fig'):
         columns_len = len(columns)
         temp_df = pd.DataFrame()
         if func == 'mode':
-            func = lambda x: x.mode().iloc[0] 
+            def func(x): return x.mode().iloc[0]
         if func == 'range':
-            func = lambda x: x.max() - x.min()
+            def func(x): return x.max() - x.min()
         for i in range(columns_len - 1):
             current_columns = columns[i:i+2]
             if values_column:
-                df_grouped = df_in[current_columns+[values_column]].groupby(current_columns)[[values_column]].agg(value = (values_column, func)).reset_index()
+                df_grouped = df_in[current_columns+[values_column]].groupby(
+                    current_columns)[[values_column]].agg(value=(values_column, func)).reset_index()
             else:
-                df_grouped = df_in[current_columns].groupby(current_columns).size().reset_index().rename(columns={0: 'value'})
+                df_grouped = df_in[current_columns].groupby(
+                    current_columns).size().reset_index().rename(columns={0: 'value'})
             temp_df = pd.concat([temp_df, df_grouped
-                                        .rename(columns={columns[i]: 'source_name', columns[i+1]: 'target_name'})], axis=0)
+                                 .rename(columns={columns[i]: 'source_name', columns[i+1]: 'target_name'})], axis=0)
         sankey_df = temp_df.reset_index(drop=True)
         return sankey_df
 
@@ -2248,7 +2551,8 @@ def sankey(df, columns, values_column=None, func='sum', mode='fig'):
         nodes_with_indexes (dict): словарь узлов с индексами
         node_colors (list): список цветов узлов
         """
-        nodes = pd.concat([sankey_df['source_name'], sankey_df['target_name']], axis=0).unique().tolist()
+        nodes = pd.concat(
+            [sankey_df['source_name'], sankey_df['target_name']], axis=0).unique().tolist()
         nodes_with_indexes = {key: [val] for val, key in enumerate(nodes)}
         colors = [
             'rgba(148, 100, 170, 1)',
@@ -2260,7 +2564,7 @@ def sankey(df, columns, values_column=None, func='sum', mode='fig'):
             'rgba(217, 119, 136, 1)',
             'rgba(64, 134, 87, 1)',
             'rgba(134, 96, 147, 1)',
-                'rgba(132, 169, 233, 1)']
+            'rgba(132, 169, 233, 1)']
         node_colors = []
         colors = itertools.cycle(colors)
         for node in nodes_with_indexes.keys():
@@ -2280,48 +2584,54 @@ def sankey(df, columns, values_column=None, func='sum', mode='fig'):
         Returns:
         link_color (list): список цветов связей
         """
-        link_color = [nodes_with_indexes[source][1].replace(', 1)', ', 0.2)') for source in sankey_df['source_name']]
+        link_color = [nodes_with_indexes[source][1].replace(
+            ', 1)', ', 0.2)') for source in sankey_df['source_name']]
         return link_color
     sankey_df = prepare_data(df, columns, values_column, func)
     nodes_with_indexes, node_colors = create_sankey_nodes(sankey_df)
     link_color = create_sankey_links(sankey_df, nodes_with_indexes)
-    sankey_df['source'] = sankey_df['source_name'].apply(lambda x: nodes_with_indexes[x][0])
-    sankey_df['target'] = sankey_df['target_name'].apply(lambda x: nodes_with_indexes[x][0])
-    sankey_df['sum_value'] = sankey_df.groupby('source_name')['value'].transform('sum')
-    sankey_df['value_percent'] = round(sankey_df['value'] * 100 / sankey_df['sum_value'], 2)
-    sankey_df['value_percent'] = sankey_df['value_percent'].apply(lambda x: f"{x}%")
+    sankey_df['source'] = sankey_df['source_name'].apply(
+        lambda x: nodes_with_indexes[x][0])
+    sankey_df['target'] = sankey_df['target_name'].apply(
+        lambda x: nodes_with_indexes[x][0])
+    sankey_df['sum_value'] = sankey_df.groupby(
+        'source_name')['value'].transform('sum')
+    sankey_df['value_percent'] = round(
+        sankey_df['value'] * 100 / sankey_df['sum_value'], 2)
+    sankey_df['value_percent'] = sankey_df['value_percent'].apply(
+        lambda x: f"{x}%")
     if mode == 'fig':
         fig = go.Figure(data=[go.Sankey(
-            domain = dict(
-            x =  [0,1],
-            y =  [0,1]
+            domain=dict(
+                x=[0, 1],
+                y=[0, 1]
             ),
-            orientation = "h",
-            valueformat = ".0f",
-            node = dict(
-            pad = 10,
-            thickness = 15,
-            line = dict(color = "black", width = 0.1),
-            label =  list(nodes_with_indexes.keys()),
-            color = node_colors
+            orientation="h",
+            valueformat=".0f",
+            node=dict(
+                pad=10,
+                thickness=15,
+                line=dict(color="black", width=0.1),
+                label=list(nodes_with_indexes.keys()),
+                color=node_colors
             ),
-            link = dict(
-            source = sankey_df['source'],
-            target = sankey_df['target'],
-            value  = sankey_df['value'],
-            label = sankey_df['value_percent'],
-            color = link_color
-        )
+            link=dict(
+                source=sankey_df['source'],
+                target=sankey_df['target'],
+                value=sankey_df['value'],
+                label=sankey_df['value_percent'],
+                color=link_color
+            )
         )])
 
         layout = dict(
-                title = f"Sankey Diagram for {', '.join(columns+[values_column])}" if values_column else
-                f"Sankey Diagram for {', '.join(columns)}",
-                height = 772,
-                font = dict(
-                size = 10),)
+            title=f"Sankey Diagram for {', '.join(columns+[values_column])}" if values_column else
+            f"Sankey Diagram for {', '.join(columns)}",
+            height=772,
+            font=dict(
+                size=10),)
 
-        fig.update_layout(layout)  
+        fig.update_layout(layout)
         return fig
     if mode == 'data':
         sankey_dict = {}
@@ -2330,6 +2640,7 @@ def sankey(df, columns, values_column=None, func='sum', mode='fig'):
         sankey_dict['node_colors'] = node_colors
         sankey_dict['link_color'] = link_color
         return sankey_dict
+
 
 def sankey_dash(df):
     """
@@ -2341,7 +2652,7 @@ def sankey_dash(df):
 
     Returns:
     app (dash.Dash): Dash application with interactive parallel_categories figure.
-        
+
     ```
     app = sankey_dash(df)
     if __name__ == '__main__':
@@ -2364,9 +2675,10 @@ def sankey_dash(df):
         temp_df = pd.DataFrame()
         for i in range(columns_len - 1):
             current_columns = columns[i:i+2]
-            df_grouped = df_in[current_columns].groupby(current_columns).size().reset_index()
+            df_grouped = df_in[current_columns].groupby(
+                current_columns).size().reset_index()
             temp_df = pd.concat([temp_df, df_grouped
-                                        .rename(columns={columns[i]: 'source_name', columns[i+1]: 'target_name'})], axis=0)
+                                 .rename(columns={columns[i]: 'source_name', columns[i+1]: 'target_name'})], axis=0)
         sankey_df = temp_df.reset_index(drop=True).rename(columns={0: 'value'})
         return sankey_df
 
@@ -2382,7 +2694,8 @@ def sankey_dash(df):
         nodes_with_indexes (dict): словарь узлов с индексами
         node_colors (list): список цветов узлов
         """
-        nodes = pd.concat([sankey_df['source_name'], sankey_df['target_name']], axis=0).unique().tolist()
+        nodes = pd.concat(
+            [sankey_df['source_name'], sankey_df['target_name']], axis=0).unique().tolist()
         nodes_with_indexes = {key: [val] for val, key in enumerate(nodes)}
         colors = [
             'rgba(148, 100, 170, 1)',
@@ -2394,7 +2707,7 @@ def sankey_dash(df):
             'rgba(217, 119, 136, 1)',
             'rgba(64, 134, 87, 1)',
             'rgba(134, 96, 147, 1)',
-                'rgba(132, 169, 233, 1)']
+            'rgba(132, 169, 233, 1)']
         node_colors = []
         colors = itertools.cycle(colors)
         for node in nodes_with_indexes.keys():
@@ -2414,7 +2727,8 @@ def sankey_dash(df):
         Returns:
         link_color (list): список цветов связей
         """
-        link_color = [nodes_with_indexes[source][1].replace(', 1)', ', 0.2)') for source in sankey_df['source_name']]
+        link_color = [nodes_with_indexes[source][1].replace(
+            ', 1)', ', 0.2)') for source in sankey_df['source_name']]
         return link_color
 
     categroy_columns = [
@@ -2444,45 +2758,51 @@ def sankey_dash(df):
         sankey_df = prepare_data(df, selected_columns)
         nodes_with_indexes, node_colors = create_sankey_nodes(sankey_df)
         link_color = create_sankey_links(sankey_df, nodes_with_indexes)
-        sankey_df['source'] = sankey_df['source_name'].apply(lambda x: nodes_with_indexes[x][0])
-        sankey_df['target'] = sankey_df['target_name'].apply(lambda x: nodes_with_indexes[x][0])
-        sankey_df['sum_value'] = sankey_df.groupby('source_name')['value'].transform('sum')
-        sankey_df['value_percent'] = round(sankey_df['value'] * 100 / sankey_df['sum_value'], 2)
-        sankey_df['value_percent'] = sankey_df['value_percent'].apply(lambda x: f"{x}%")
+        sankey_df['source'] = sankey_df['source_name'].apply(
+            lambda x: nodes_with_indexes[x][0])
+        sankey_df['target'] = sankey_df['target_name'].apply(
+            lambda x: nodes_with_indexes[x][0])
+        sankey_df['sum_value'] = sankey_df.groupby(
+            'source_name')['value'].transform('sum')
+        sankey_df['value_percent'] = round(
+            sankey_df['value'] * 100 / sankey_df['sum_value'], 2)
+        sankey_df['value_percent'] = sankey_df['value_percent'].apply(
+            lambda x: f"{x}%")
         fig = go.Figure(data=[go.Sankey(
-            domain = dict(
-            x =  [0,1],
-            y =  [0,1]
+            domain=dict(
+                x=[0, 1],
+                y=[0, 1]
             ),
-            orientation = "h",
-            valueformat = ".0f",
-            node = dict(
-            pad = 10,
-            thickness = 15,
-            line = dict(color = "black", width = 0.1),
-            label =  list(nodes_with_indexes.keys()),
-            color = node_colors
+            orientation="h",
+            valueformat=".0f",
+            node=dict(
+                pad=10,
+                thickness=15,
+                line=dict(color="black", width=0.1),
+                label=list(nodes_with_indexes.keys()),
+                color=node_colors
             ),
-            link = dict(
-            source = sankey_df['source'],
-            target = sankey_df['target'],
-            value  = sankey_df['value'],
-            label = sankey_df['value_percent'],
-            color = link_color
-        )
+            link=dict(
+                source=sankey_df['source'],
+                target=sankey_df['target'],
+                value=sankey_df['value'],
+                label=sankey_df['value_percent'],
+                color=link_color
+            )
         )])
 
         layout = dict(
-                title = f"Sankey Diagram for {', '.join(selected_columns)}",
-                height = 772,
-                font = dict(
-                size = 10),)
+            title=f"Sankey Diagram for {', '.join(selected_columns)}",
+            height=772,
+            font=dict(
+                size=10),)
 
-        fig.update_layout(layout)  
+        fig.update_layout(layout)
 
         return fig
 
     return app
+
 
 def graph_analysis(df, cat_coluns, num_column):
     """
@@ -2506,19 +2826,19 @@ def graph_analysis(df, cat_coluns, num_column):
     This function prepares the dataframe for plotting, creates visualizations (such as bar, line, and area plots, heatmaps, treemaps, and sankey diagrams),
     and updates the layout of the plots based on the provided configuration.
     It uses the `prepare_df` and `prepare_data_treemap` functions to prepare the data for plotting.
-    """    
+    """
     if len(cat_coluns) != 2:
         raise Exception('cat_coluns must be  a list of two columns')
     if not isinstance(num_column, str):
         raise Exception('num_column must be  str')
     df_coluns = df.columns
-    if cat_coluns[0]  not in df_coluns or cat_coluns[1] not in df_coluns or num_column not in df_coluns:
+    if cat_coluns[0] not in df_coluns or cat_coluns[1] not in df_coluns or num_column not in df_coluns:
         raise Exception('cat_coluns and num_column must be  in df.columns')
     if not pd.api.types.is_categorical_dtype(df[cat_coluns[0]]) or not pd.api.types.is_categorical_dtype(df[cat_coluns[1]]):
         raise Exception('cat_coluns must be categorical')
     if not pd.api.types.is_numeric_dtype(df[num_column]):
         raise Exception('num_column must be numeric')
-    
+
     config = {
         'df': df,
         'num_column_y': num_column,
@@ -2528,13 +2848,11 @@ def graph_analysis(df, cat_coluns, num_column):
         'func': 'sum'
     }
     colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
-                        , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
-                        , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2'
-                        , 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+                        '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
                         '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2']
+
     def prepare_df(config):
         """
         Prepare a dataframe for plotting by grouping and aggregating data.
@@ -2556,35 +2874,40 @@ def graph_analysis(df, cat_coluns, num_column):
         If a color column is specified, the function unstacks the dataframe and sorts it by the sum of the numeric column.
         """
         df = config['df']
-        cat_column_color = [config['cat_column_color']] if config['cat_column_color'] else []
-        cat_columns = [config['cat_column_x']] + cat_column_color  
+        cat_column_color = [config['cat_column_color']
+                            ] if config['cat_column_color'] else []
+        cat_columns = [config['cat_column_x']] + cat_column_color
         num_column = config['num_column_y']
         # print(config)
         # print(cat_columns)
         # print(num_column)
         func = config.get('func', 'sum')  # default to 'sum' if not provided
         if func == 'mode':
-            func = lambda x: x.mode().iloc[0] 
-            func_for_modes = lambda x: tuple(x.mode().to_list())
+            def func(x): return x.mode().iloc[0]
+            def func_for_modes(x): return tuple(x.mode().to_list())
         else:
-            func_for_modes = lambda x: ''
+            def func_for_modes(x): return ''
         if func == 'range':
-            func = lambda x: x.max() - x.min()
+            def func(x): return x.max() - x.min()
         func_df = (df[[*cat_columns, num_column]]
-            .groupby(cat_columns) 
-            .agg(num = (num_column, func), modes = (num_column, func_for_modes)) 
-            .sort_values('num', ascending=False)
-            .rename(columns={'num': num_column})
-        )
+                   .groupby(cat_columns)
+                   .agg(num=(num_column, func), modes=(num_column, func_for_modes))
+                   .sort_values('num', ascending=False)
+                   .rename(columns={'num': num_column})
+                   )
         if config['cat_column_color']:
-            func_df = func_df.unstack(level=1)        
+            func_df = func_df.unstack(level=1)
             func_df['sum'] = func_df.sum(axis=1, numeric_only=True)
-            func_df = func_df.sort_values('sum', ascending=False).drop('sum', axis=1)
-            func_df = pd.concat([func_df[num_column], func_df['modes']], keys=['num', 'modes'])
-            func_df = func_df.sort_values(func_df.index[0], axis=1, ascending=False)
+            func_df = func_df.sort_values(
+                'sum', ascending=False).drop('sum', axis=1)
+            func_df = pd.concat(
+                [func_df[num_column], func_df['modes']], keys=['num', 'modes'])
+            func_df = func_df.sort_values(
+                func_df.index[0], axis=1, ascending=False)
             return func_df
         else:
             return func_df
+
     def prepare_data_treemap(df, cat_columns, value_column, func='sum'):
         """
         Prepare data for a treemap plot by grouping and aggregating data.
@@ -2613,24 +2936,30 @@ def graph_analysis(df, cat_coluns, num_column):
         df_in = df[cat_columns + [value_column]].copy()
         prefix = 'All/'
         if func == 'mode':
-            func = lambda x: x.mode().iloc[0] 
+            def func(x): return x.mode().iloc[0]
         if func == 'range':
-            func = lambda x: x.max() - x.min()    
-        df_grouped_second_level = df_in[[*cat_columns, value_column]].groupby(cat_columns).agg({value_column: func}).reset_index()
-        df_grouped_second_level['ids'] = df_grouped_second_level[cat_columns].apply(lambda x: f'{prefix}{x[cat_columns[0]]}/{x[cat_columns[1]]}', axis=1)
-        df_grouped_second_level['parents'] = df_grouped_second_level[cat_columns].apply(lambda x: f'{prefix}{x[cat_columns[0]]}', axis=1)
-        df_grouped_second_level = df_grouped_second_level.sort_values(cat_columns[::-1], ascending=False)
+            def func(x): return x.max() - x.min()
+        df_grouped_second_level = df_in[[*cat_columns, value_column]].groupby(
+            cat_columns).agg({value_column: func}).reset_index()
+        df_grouped_second_level['ids'] = df_grouped_second_level[cat_columns].apply(
+            lambda x: f'{prefix}{x[cat_columns[0]]}/{x[cat_columns[1]]}', axis=1)
+        df_grouped_second_level['parents'] = df_grouped_second_level[cat_columns].apply(
+            lambda x: f'{prefix}{x[cat_columns[0]]}', axis=1)
+        df_grouped_second_level = df_grouped_second_level.sort_values(
+            cat_columns[::-1], ascending=False)
         # df_grouped = df_grouped.drop(cat_columns[0], axis=1)
-        df_grouped_first_level = df_grouped_second_level.groupby(cat_columns[0]).sum().reset_index()
-        df_grouped_first_level['ids'] = df_grouped_first_level[cat_columns[0]].apply(lambda x: f'{prefix}{x}')
+        df_grouped_first_level = df_grouped_second_level.groupby(
+            cat_columns[0]).sum().reset_index()
+        df_grouped_first_level['ids'] = df_grouped_first_level[cat_columns[0]].apply(
+            lambda x: f'{prefix}{x}')
         df_grouped_first_level['parents'] = 'All'
-        df_grouped_first_level = df_grouped_first_level.sort_values(cat_columns[0], ascending=False)
+        df_grouped_first_level = df_grouped_first_level.sort_values(
+            cat_columns[0], ascending=False)
         all_value = df_grouped_first_level[value_column].sum()
-        res_df = pd.concat([df_grouped_second_level.rename(columns={cat_columns[1]: 'labels', value_column: 'values'}).drop(cat_columns[0], axis=1)
-                            , df_grouped_first_level.rename(columns={cat_columns[0]: 'labels', value_column: 'values'})
-                            , pd.DataFrame({'parents': '', 'labels': 'All',  'values': all_value, 'ids': 'All'}, index=[0])]
-                            , axis=0)
+        res_df = pd.concat([df_grouped_second_level.rename(columns={cat_columns[1]: 'labels', value_column: 'values'}).drop(cat_columns[0], axis=1), df_grouped_first_level.rename(
+            columns={cat_columns[0]: 'labels', value_column: 'values'}), pd.DataFrame({'parents': '', 'labels': 'All',  'values': all_value, 'ids': 'All'}, index=[0])], axis=0)
         return res_df
+
     def create_bars_lines_area_figure(config):
         """
         Create a figure with bar, line, and area traces based on the provided configuration.
@@ -2648,90 +2977,65 @@ def graph_analysis(df, cat_coluns, num_column):
         fig = go.Figure()
         # 1
         config['cat_column_x'] = config['cat_columns'][0]
-        config['cat_column_color'] = ''    
+        config['cat_column_color'] = ''
         df_for_fig = prepare_df(config)
         x = df_for_fig.index.tolist()
         y = df_for_fig[config['num_column_y']].values.tolist()
-        bar_traces = px.bar(x=x
-        , y=y
-        ).data
-        line_traces = px.line(x=x
-        , y=y
-        , markers=True
-        ).data
-        area_traces = px.area(x=x
-        , y=y
-        , markers=True
-        ).data    
+        bar_traces = px.bar(x=x, y=y
+                            ).data
+        line_traces = px.line(x=x, y=y, markers=True
+                              ).data
+        area_traces = px.area(x=x, y=y, markers=True
+                              ).data
         fig.add_traces(bar_traces + line_traces + area_traces)
         # 2
         config['cat_column_x'] = config['cat_columns'][1]
-        config['cat_column_color'] = ''    
+        config['cat_column_color'] = ''
         df_for_fig = prepare_df(config)
         x = df_for_fig.index.tolist()
         y = df_for_fig[config['num_column_y']].values.tolist()
-        bar_traces = px.bar(x=x
-        , y=y
-        ).data
-        line_traces = px.line(x=x
-        , y=y
-        , markers=True
-        ).data
-        area_traces = px.area(x=x
-        , y=y
-        , markers=True
-        ).data    
+        bar_traces = px.bar(x=x, y=y
+                            ).data
+        line_traces = px.line(x=x, y=y, markers=True
+                              ).data
+        area_traces = px.area(x=x, y=y, markers=True
+                              ).data
         fig.add_traces(bar_traces + line_traces + area_traces)
         # 12
         config['cat_column_x'] = config['cat_columns'][0]
         config['cat_column_color'] = config['cat_columns'][1]
-        df_for_fig = prepare_df(config).loc['num', :].stack().reset_index(name=config['num_column_y'])
+        df_for_fig = prepare_df(config).loc['num', :].stack(
+        ).reset_index(name=config['num_column_y'])
         x = df_for_fig[config['cat_column_x']].values.tolist()
         y = df_for_fig[config['num_column_y']].values.tolist()
-        color = df_for_fig[config['cat_column_color']].values if config['cat_column_color'] else None    
-        bar_traces = px.bar(x=x
-        , y=y
-        , color=color
-        , barmode='group'
-        ).data
+        color = df_for_fig[config['cat_column_color']
+                           ].values if config['cat_column_color'] else None
+        bar_traces = px.bar(x=x, y=y, color=color, barmode='group'
+                            ).data
         config['traces_cnt12'] = len(bar_traces)
-        line_traces = px.line(x=x
-        , y=y
-        , color=color
-        , markers=True
-        ).data
-        area_traces = px.area(x=x
-        , y=y
-        , color=color
-        , markers=True
-        ).data    
+        line_traces = px.line(x=x, y=y, color=color, markers=True
+                              ).data
+        area_traces = px.area(x=x, y=y, color=color, markers=True
+                              ).data
         fig.add_traces(bar_traces + line_traces + area_traces)
 
         # 21
         config['cat_column_x'] = config['cat_columns'][1]
         config['cat_column_color'] = config['cat_columns'][0]
-        df_for_fig = prepare_df(config).loc['num', :].stack().reset_index(name=config['num_column_y'])
+        df_for_fig = prepare_df(config).loc['num', :].stack(
+        ).reset_index(name=config['num_column_y'])
         x = df_for_fig[config['cat_column_x']].values.tolist()
         y = df_for_fig[config['num_column_y']].values.tolist()
-        color = df_for_fig[config['cat_column_color']].values if config['cat_column_color'] else None    
-        bar_traces = px.bar(x=x
-        , y=y
-        , color=color
-        , barmode='group'
-        ).data
+        color = df_for_fig[config['cat_column_color']
+                           ].values if config['cat_column_color'] else None
+        bar_traces = px.bar(x=x, y=y, color=color, barmode='group'
+                            ).data
         config['traces_cnt21'] = len(bar_traces)
-        line_traces = px.line(x=x
-        , y=y
-        , color=color
-        , markers=True
-        ).data
-        area_traces = px.area(x=x
-        , y=y
-        , color=color
-        , markers=True
-        ).data    
+        line_traces = px.line(x=x, y=y, color=color, markers=True
+                              ).data
+        area_traces = px.area(x=x, y=y, color=color, markers=True
+                              ).data
         fig.add_traces(bar_traces + line_traces + area_traces)
-        
 
         for i, trace in enumerate(fig.data):
             # при старте показываем только первый trace
@@ -2739,9 +3043,9 @@ def graph_analysis(df, cat_coluns, num_column):
                 trace.visible = False
             if trace.type == 'scatter':
                 trace.line.width = 2
-                # trace.marker.size = 7      
+                # trace.marker.size = 7
         return fig
-    
+
     def create_heatmap_treemap_sankey_figure(config):
         """
         Create a figure with heatmap, treemap, and sankey diagrams based on the provided configuration.
@@ -2755,30 +3059,33 @@ def graph_analysis(df, cat_coluns, num_column):
         -------
         fig : plotly.graph_objects.Figure
             A figure object containing heatmap, treemap, and sankey diagrams.
-        """        
+        """
         fig = go.Figure()
-        
+
         # # heatmap
-        pivot_for_heatmap = config['df'].pivot_table(index=config['cat_columns'][0], columns=config['cat_columns'][1], values=config['num_column_y'])
+        pivot_for_heatmap = config['df'].pivot_table(
+            index=config['cat_columns'][0], columns=config['cat_columns'][1], values=config['num_column_y'])
         heatmap_trace = px.imshow(pivot_for_heatmap, text_auto=".0f").data[0]
-        heatmap_trace.xgap=3
-        heatmap_trace.ygap=3
+        heatmap_trace.xgap = 3
+        heatmap_trace.ygap = 3
         fig.add_trace(heatmap_trace)
-        fig.update_layout(coloraxis=dict(colorscale=[(0, 'rgba(204, 153, 255, 0.1)'), (1, 'rgb(127, 60, 141)')])
-                                                , hoverlabel=dict(bgcolor='white'))
+        fig.update_layout(coloraxis=dict(colorscale=[
+                          (0, 'rgba(204, 153, 255, 0.1)'), (1, 'rgb(127, 60, 141)')]), hoverlabel=dict(bgcolor='white'))
         # treemap
-        treemap_trace = columns = treemap(config['df'], config['cat_columns'], config['num_column_y']).data[0]
+        treemap_trace = columns = treemap(
+            config['df'], config['cat_columns'], config['num_column_y']).data[0]
         fig.add_trace(treemap_trace)
-        
+
         # sankey
-        sankey_trace =  sankey(config['df'], config['cat_columns'], config['num_column_y'], func='sum').data[0]
+        sankey_trace = sankey(
+            config['df'], config['cat_columns'], config['num_column_y'], func='sum').data[0]
         fig.add_trace(sankey_trace)
         for i, trace in enumerate(fig.data):
-        # при старте показываем только первый trace
+            # при старте показываем только первый trace
             if i:
                 trace.visible = False
         return fig
-        
+
     def create_buttons_bars_lines_ares(config):
         """
         Create buttons for updating the layout of a figure with bar, line, and area traces.
@@ -2795,16 +3102,18 @@ def graph_analysis(df, cat_coluns, num_column):
         """
         buttons = []
         buttons.append(dict(label='Ver', method='restyle', args=[{'orientation': ['v'] * 3 + ['v'] * 3
-                                                + ['v'] * config['traces_cnt12'] * 3
-                                                + ['v'] * config['traces_cnt21'] * 3}
-                                                                ]))
+                                                                  + ['v'] * config['traces_cnt12'] * 3
+                                                                  + ['v'] * config['traces_cnt21'] * 3}
+                                                                 ]))
         buttons.append(dict(label='Hor', method='restyle', args=[{'orientation': ['h'] * 3 + ['h'] * 3
-                                                + ['h'] * config['traces_cnt12'] * 3
-                                                + ['h'] * config['traces_cnt21'] * 3}]))
-        buttons.append(dict(label='stack', method='relayout', args=[{'barmode': 'stack'}]))
-        buttons.append(dict(label='group', method='relayout', args=[{'barmode': 'group'}]))
+                                                                  + ['h'] * config['traces_cnt12'] * 3
+                                                                  + ['h'] * config['traces_cnt21'] * 3}]))
+        buttons.append(dict(label='stack', method='relayout',
+                       args=[{'barmode': 'stack'}]))
+        buttons.append(dict(label='group', method='relayout',
+                       args=[{'barmode': 'group'}]))
         # buttons.append(dict(label='overlay', method='relayout', args=[{'barmode': 'overlay'}]))
-                
+
     #    add range, distinct count
         for i, func in enumerate(['sum', 'mean', 'median', 'count', 'nunique', 'mode', 'std', 'min', 'max', 'range']):
             config['func'] = func
@@ -2818,12 +3127,15 @@ def graph_analysis(df, cat_coluns, num_column):
             name_12 = df_num12.columns.tolist()
             modes_array12 = df_for_update.loc['modes', :].fillna('').values.T
             if func == 'mode':
-                text_12 = [[', '.join(map(str, col)) if col else '' for col in row] for row in modes_array12]
-                colors = [['orange' if len(col) > 1 else colorway_for_bar[i] for col in row] for i, row in enumerate(modes_array12)]
+                text_12 = [
+                    [', '.join(map(str, col)) if col else '' for col in row] for row in modes_array12]
+                colors = [['orange' if len(col) > 1 else colorway_for_bar[i]
+                           for col in row] for i, row in enumerate(modes_array12)]
                 colors12 = [{'color': col_list} for col_list in colors]
             else:
                 text_12 = [['' for col in row] for row in modes_array12]
-                colors = [[colorway_for_bar[i] for col in row] for i, row in enumerate(modes_array12)]
+                colors = [[colorway_for_bar[i] for col in row]
+                          for i, row in enumerate(modes_array12)]
                 colors12 = [{'color': col_list} for col_list in colors]
 
             # 21
@@ -2836,110 +3148,111 @@ def graph_analysis(df, cat_coluns, num_column):
             name_21 = df_num21.columns.tolist()
             modes_array21 = df_for_update.loc['modes', :].fillna('').values.T
             if func == 'mode':
-                text_21 = [[', '.join(map(str, col)) if col else '' for col in row] for row in modes_array21]
-                colors = [['orange' if len(col) > 1 else colorway_for_bar[i] for col in row] for i, row in enumerate(modes_array21)]
-                colors21 = [{'color': col_list} for col_list in colors]          
+                text_21 = [
+                    [', '.join(map(str, col)) if col else '' for col in row] for row in modes_array21]
+                colors = [['orange' if len(col) > 1 else colorway_for_bar[i]
+                           for col in row] for i, row in enumerate(modes_array21)]
+                colors21 = [{'color': col_list} for col_list in colors]
             else:
                 text_21 = [[''for col in row] for row in modes_array21]
-                colors = [[colorway_for_bar[i] for col in row] for i, row in enumerate(modes_array21)]
-                colors21 = [{'color': col_list} for col_list in colors]    
+                colors = [[colorway_for_bar[i] for col in row]
+                          for i, row in enumerate(modes_array21)]
+                colors21 = [{'color': col_list} for col_list in colors]
             # 1
             config['cat_column_x'] = config['cat_columns'][0]
-            config['cat_column_color'] = ''    
+            config['cat_column_color'] = ''
             df_for_update = prepare_df(config)
             x_1 = df_for_update.index.tolist()
             y_1 = df_for_update[config['num_column_y']].values.tolist()
             modes_array1 = df_for_update['modes'].to_list()
-            if func == 'mode':  
-                text_1 = [[', '.join(map(str,x)) for x in modes_array1]]
-                colors_1 =[{'color': ['orange' if len(x) > 1 else colorway_for_bar[0] for x in modes_array1]}]
+            if func == 'mode':
+                text_1 = [[', '.join(map(str, x)) for x in modes_array1]]
+                colors_1 = [{'color': ['orange' if len(
+                    x) > 1 else colorway_for_bar[0] for x in modes_array1]}]
             else:
                 text_1 = ['']
-                colors_1 =[{'color': [colorway_for_bar[0] for x in modes_array1]}]
+                colors_1 = [{'color': [colorway_for_bar[0]
+                                       for x in modes_array1]}]
             # 2
             config['cat_column_x'] = config['cat_columns'][1]
-            config['cat_column_color'] = ''    
+            config['cat_column_color'] = ''
             df_for_update = prepare_df(config)
             x_2 = df_for_update.index.tolist()
-            y_2 = df_for_update[config['num_column_y']].values.tolist()  
+            y_2 = df_for_update[config['num_column_y']].values.tolist()
             modes_array2 = df_for_update['modes'].to_list()
-            if func == 'mode': 
-                text_2 = [[', '.join(map(str,x)) for x in modes_array2]]
-                colors_2 = [{'color': ['orange' if len(x) > 1 else colorway_for_bar[0] for x in modes_array2]}]   
+            if func == 'mode':
+                text_2 = [[', '.join(map(str, x)) for x in modes_array2]]
+                colors_2 = [{'color': ['orange' if len(
+                    x) > 1 else colorway_for_bar[0] for x in modes_array2]}]
             else:
                 text_2 = ['']
-                colors_2 = [{'color': [colorway_for_bar[0] for x in modes_array2]}]  
-            
-            args=[{
+                colors_2 = [{'color': [colorway_for_bar[0]
+                                       for x in modes_array2]}]
+
+            args = [{
                 'orientation': ['v'] * 3 + ['v'] * 3
-                        + ['v'] * config['traces_cnt12'] * 3
-                        + ['v'] * config['traces_cnt21'] * 3
+                + ['v'] * config['traces_cnt12'] * 3
                 # для каждго trace должент быть свой x, поэтому x умножаем на количество trace
-                , 'x': [x_1] * 3 + [x_2] * 3
-                        + [x_12] * config['traces_cnt12'] * 3
-                        + [x_21] * config['traces_cnt21'] * 3
+                + ['v'] * config['traces_cnt21'] * 3, 'x': [x_1] * 3 + [x_2] * 3
+                + [x_12] * config['traces_cnt12'] * 3
                 # для y1 и y2 нужно обренуть в список
-                , 'y': [y_1] * 3 + [y_2] * 3 + y_12 * 3 +  y_21 * 3
-
                 # для 1 и 2 нет цветов, поэтому названия делаем пустыми
-                , 'name': [''] * 3 + [''] * 3 + name_12 * 3 +  name_21 * 3 + [''] + [''] + ['']
-
-                , 'text': text_1 * 3 + text_2 * 3 + text_12 * 3 + text_21 * 3 
-                , 'marker': colors_1 * 3 + colors_2 * 3 + colors12 * 3 + colors21 * 3 
-                , 'textposition': 'none'
-                , 'textfont': {'color': 'black'}
-                }, {'title': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"
-                    , 'updatemenus[0].active': 0}                                  
+                + [x_21] * config['traces_cnt21'] * 3, 'y': [y_1] * 3 + [y_2] * 3 + y_12 * 3 + y_21 * 3, 'name': [''] * 3 + [''] * 3 + name_12 * 3 + name_21 * 3 + [''] + [''] + [''], 'text': text_1 * 3 + text_2 * 3 + text_12 * 3 + text_21 * 3, 'marker': colors_1 * 3 + colors_2 * 3 + colors12 * 3 + colors21 * 3, 'textposition': 'none', 'textfont': {'color': 'black'}
+            }, {'title': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}", 'updatemenus[0].active': 0}
             ]
-            if func == 'mode': 
+            if func == 'mode':
                 args[0]['hovertemplate'] = ['x=%{x}<br>y=%{y}<br>modes=%{text}'] * 6 \
-                            + ['x=%{x}<br>y=%{y}<br>color=%{data.name}<br>modes=%{text}'] * (config['traces_cnt12'] + config['traces_cnt21']) * 3
+                    + ['x=%{x}<br>y=%{y}<br>color=%{data.name}<br>modes=%{text}'] * \
+                    (config['traces_cnt12'] + config['traces_cnt21']) * 3
             else:
                 args[0]['hovertemplate'] = ['x=%{x}<br>y=%{y}'] * 6 \
-                            + ['x=%{x}<br>y=%{y}<br>color=%{data.name}'] * (config['traces_cnt12'] + config['traces_cnt21']) * 3
-            
-            buttons.append(dict(label=f'{func.capitalize()}'
-                                , method='update'
-                                # , args2=[{'orientation': 'h'}, {'title': f"{func} &nbsp;&nbsp;&nbsp;&nbsp;num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"}]
+                    + ['x=%{x}<br>y=%{y}<br>color=%{data.name}'] * \
+                    (config['traces_cnt12'] + config['traces_cnt21']) * 3
+
+            buttons.append(dict(label=f'{func.capitalize()}', method='update'                                # , args2=[{'orientation': 'h'}, {'title': f"{func} &nbsp;&nbsp;&nbsp;&nbsp;num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"}]
                                 , args=args))
 
-
-        traces_visible = {'1b': [[False]], '1l': [[False]], '1a': [[False]], '2b': [[False]], '2l': [[False]], '2a': [[False]]
-            , '12b': [[False] * config['traces_cnt12']], '12l': [[False] * config['traces_cnt12']], '12a': [[False] * config['traces_cnt12']]
-            , '21b': [[False] * config['traces_cnt21']], '21l': [[False] * config['traces_cnt21']], '21a': [[False] * config['traces_cnt21']]
-            }
+        traces_visible = {'1b': [[False]], '1l': [[False]], '1a': [[False]], '2b': [[False]], '2l': [[False]], '2a': [[False]], '12b': [[False] * config['traces_cnt12']], '12l': [[False] * config['traces_cnt12']], '12a': [[False] * config['traces_cnt12']], '21b': [[False] * config['traces_cnt21']], '21l': [[False] * config['traces_cnt21']], '21a': [[False] * config['traces_cnt21']]
+                          }
         traces_visible_df = pd.DataFrame(traces_visible)
         traces_lables_bar = {'1b': '1', '2b': '2', '12b': '12', '21b': '21'}
         traces_lables_line = {'1l': '1', '2l': '2', '12l': '12', '21l': '21'}
         traces_lables_area = {'1a': '1', '2a': '2', '12a': '12', '21a': '21'}
-        traces_lables = {**traces_lables_bar, **traces_lables_line, **traces_lables_area}
+        traces_lables = {**traces_lables_bar, **
+                         traces_lables_line, **traces_lables_area}
         for button_label in traces_lables:
             traces_visible_df_copy = traces_visible_df.copy()
-            traces_visible_df_copy[button_label] = traces_visible_df_copy[button_label].apply(lambda x: [True for _ in x])
-            visible_mask = [val for l in traces_visible_df_copy.loc[0].values for val in l]
-            data = {'visible': visible_mask, 'xaxis': {'visible': False}, 'yaxis': {'visible': False}}
-            visible = True if button_label in list(traces_lables_bar.keys()) else False
-            buttons.append(dict(label=traces_lables[button_label], method='restyle', args=[data], visible=visible))
-        
+            traces_visible_df_copy[button_label] = traces_visible_df_copy[button_label].apply(
+                lambda x: [True for _ in x])
+            visible_mask = [
+                val for l in traces_visible_df_copy.loc[0].values for val in l]
+            data = {'visible': visible_mask, 'xaxis': {
+                'visible': False}, 'yaxis': {'visible': False}}
+            visible = True if button_label in list(
+                traces_lables_bar.keys()) else False
+            buttons.append(dict(label=traces_lables[button_label], method='restyle', args=[
+                           data], visible=visible))
+
         buttons.append(dict(
             label='Bar',
             method='relayout',
-            args=[{**{f'updatemenus[2].buttons[{i}].visible': True for i in range(4)}, **{f'updatemenus[2].buttons[{i}].visible': False for i in range(4, 12)}}]
+            args=[{**{f'updatemenus[2].buttons[{i}].visible': True for i in range(
+                4)}, **{f'updatemenus[2].buttons[{i}].visible': False for i in range(4, 12)}}]
         ))
         buttons.append(dict(
             label='Line',
             method='relayout',
-            args=[{**{f'updatemenus[2].buttons[{i}].visible': False for i in list(range(4)) + list(range(8, 12))}, **{f'updatemenus[2].buttons[{i}].visible': True for i in range(4, 8)}}]
-        )) 
+            args=[{**{f'updatemenus[2].buttons[{i}].visible': False for i in list(range(4)) + list(
+                range(8, 12))}, **{f'updatemenus[2].buttons[{i}].visible': True for i in range(4, 8)}}]
+        ))
         buttons.append(dict(
             label='Area',
             method='relayout',
-            args=[{**{f'updatemenus[2].buttons[{i}].visible': False for i in range(8)}, **{f'updatemenus[2].buttons[{i}].visible': True for i in range(8, 12)}}]
-        ))        
-    
-        
-        return buttons
+            args=[{**{f'updatemenus[2].buttons[{i}].visible': False for i in range(
+                8)}, **{f'updatemenus[2].buttons[{i}].visible': True for i in range(8, 12)}}]
+        ))
 
+        return buttons
 
     def update_layout_bars_lines_ares(fig, buttons):
         """
@@ -2964,7 +3277,7 @@ def graph_analysis(df, cat_coluns, num_column):
                     xanchor="left",
                     y=1.05,
                     yanchor="bottom"
-                ),        
+                ),
                 dict(
                     type="buttons",
                     direction="left",
@@ -2975,18 +3288,19 @@ def graph_analysis(df, cat_coluns, num_column):
                     xanchor="left",
                     y=1.05,
                     yanchor="bottom"
-                ),                 
+                ),
                 dict(
                     type="buttons",
                     direction="left",
-                    buttons=buttons[14:26],  # first 3 buttons (Bar, Line, Area)
+                    # first 3 buttons (Bar, Line, Area)
+                    buttons=buttons[14:26],
                     pad={"r": 10, "t": 70},
                     showactive=True,
                     x=0,
                     xanchor="left",
                     y=1.2,
                     yanchor="bottom"
-                ),          
+                ),
                 dict(
                     type="buttons",
                     direction="left",
@@ -2997,11 +3311,10 @@ def graph_analysis(df, cat_coluns, num_column):
                     xanchor="left",
                     y=1.2,
                     yanchor="bottom"
-                ),                                                                                                            
+                ),
             ]
         )
-        
-        
+
     def create_buttons_heatmap_treemap_sankey(config):
         """
         Create buttons for updating the layout of a figure with heatmap, treemap, and sankey diagrams.
@@ -3015,88 +3328,77 @@ def graph_analysis(df, cat_coluns, num_column):
         -------
         buttons : list
             A list of button objects for updating the layout of a figure.
-        """   
+        """
         buttons = []
-        buttons.append(dict(label='Ver', method='restyle', args=[{'orientation': ['v'] + ['v'] + ['h']}]))
-        buttons.append(dict(label='Hor', method='restyle', args=[{'orientation': ['h'] + ['h'] + ['h']}]))
+        buttons.append(dict(label='Ver', method='restyle', args=[
+                       {'orientation': ['v'] + ['v'] + ['h']}]))
+        buttons.append(dict(label='Hor', method='restyle', args=[
+                       {'orientation': ['h'] + ['h'] + ['h']}]))
         # buttons.append(dict(label='overlay', method='relayout', args=[{'barmode': 'overlay'}]))
-            
-        buttons.append(dict(label='heatmap', method='update', args=[{'visible': [True, False, False]}
-                                                                    , {'xaxis': {'visible': True}, 'yaxis': {'visible': True}}]))
-        buttons.append(dict(label='treemap', method='update', args=[{'visible': [False, True, False]}
-                                                                    , {'xaxis': {'visible': False}, 'yaxis': {'visible': False}}]))
-        buttons.append(dict(label='sankey', method='update', args=[{'visible': [False, False, True]}
-                                                                    , {'xaxis': {'visible': False}, 'yaxis': {'visible': False}}]))        
+
+        buttons.append(dict(label='heatmap', method='update', args=[{'visible': [
+                       True, False, False]}, {'xaxis': {'visible': True}, 'yaxis': {'visible': True}}]))
+        buttons.append(dict(label='treemap', method='update', args=[{'visible': [
+                       False, True, False]}, {'xaxis': {'visible': False}, 'yaxis': {'visible': False}}]))
+        buttons.append(dict(label='sankey', method='update', args=[{'visible': [
+                       False, False, True]}, {'xaxis': {'visible': False}, 'yaxis': {'visible': False}}]))
     #    add range, distinct count
         for i, func in enumerate(['sum', 'count', 'nunique']):
             config['func'] = func
-                        
-            # heatmap       
-            pivot_for_heatmap = config['df'].pivot_table(index=config['cat_columns'][0], columns=config['cat_columns'][1], values=config['num_column_y'], aggfunc=func)            
+
+            # heatmap
+            pivot_for_heatmap = config['df'].pivot_table(
+                index=config['cat_columns'][0], columns=config['cat_columns'][1], values=config['num_column_y'], aggfunc=func)
             x_heatmap = pivot_for_heatmap.index.tolist()
             y_heatmap = pivot_for_heatmap.columns.tolist()
             z_heatmap = pivot_for_heatmap.values
             if i % 2 == 0:
-                    z_heatmap = z_heatmap.T  
+                z_heatmap = z_heatmap.T
             # treemap
-            df_treemap = prepare_data_treemap(config['df'], config['cat_columns'], config['num_column_y'], func)
+            df_treemap = prepare_data_treemap(
+                config['df'], config['cat_columns'], config['num_column_y'], func)
             treemap_ids = df_treemap['ids'].to_numpy()
             treemap_parents = df_treemap['parents'].to_numpy()
             treemap_labels = df_treemap['labels'].to_numpy()
             treemap_values = df_treemap['values'].to_numpy()
-            
+
             # sankey
-            sankey_dict = sankey(config['df'], config['cat_columns'], config['num_column_y'], func, mode='data')
-            sankey_df = sankey_dict['sankey_df'] 
-            nodes_with_indexes = sankey_dict['nodes_with_indexes'] 
+            sankey_dict = sankey(
+                config['df'], config['cat_columns'], config['num_column_y'], func, mode='data')
+            sankey_df = sankey_dict['sankey_df']
+            nodes_with_indexes = sankey_dict['nodes_with_indexes']
             node_colors = sankey_dict['node_colors']
             link_color = sankey_dict['link_color']
             link = dict(
-                        source = sankey_df['source'],
-                        target = sankey_df['target'],
-                        value  = sankey_df['value'],
-                        label = sankey_df['value_percent'],
-                        color = link_color
-                    )         
-            sankey_labels = list(nodes_with_indexes.keys())   
-        
-            buttons.append(dict(label=f'{func.capitalize()}'
-                                , method='update'
-                                , args2=[{'orientation': 'h'}] #, {'title': f"{func} &nbsp;&nbsp;&nbsp;&nbsp;num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"}]
+                source=sankey_df['source'],
+                target=sankey_df['target'],
+                value=sankey_df['value'],
+                label=sankey_df['value_percent'],
+                color=link_color
+            )
+            sankey_labels = list(nodes_with_indexes.keys())
+
+            buttons.append(dict(label=f'{func.capitalize()}', method='update', args2=[{'orientation': 'h'}]  # , {'title': f"{func} &nbsp;&nbsp;&nbsp;&nbsp;num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"}]
 
                                 , args=[{
-                                    'orientation': 'h'
-                                    , 'x': [x_heatmap] + [None] + [None]
                                     # для y1 и y2 нужно обренуть в список
-                                    , 'y': [y_heatmap] + [None] + [None]
                                     # , 'z': [z_heatmap]
                                     # , 'orientation': 'v'
-                                    , 'z': [z_heatmap] + [None] + [None]
                                     # treemap
-                                    , 'ids': [None] + [treemap_ids] + [None]
-                                    , 'labels': [None] + [treemap_labels] + [None]
-                                    , 'parents': [None] + [treemap_parents] + [None]
-                                    , 'values': [None] + [treemap_values] + [None] 
                                     # sankey
-                                    , 'label': [None] + [None] + [sankey_labels]
-                                    , 'color':[None] + [None] + [node_colors]
-                                    , 'link': [None] + [None] + [link]                
                                     # , 'layout.annotations': annotations
                                     # для 1 и 2 нет цветов, поэтому названия делаем пустыми
-                                    , 'hovertemplate':  ['x=%{x}<br>y=%{y}<br>z=%{z:.0f}']
-                                                        + ['%{label}<br>%{value}'] + [None]}
-                                    , {'title': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}"
-                                        , 'updatemenus[0].active': 0}
-                                ]))     
-
+                                    'orientation': 'h', 'x': [x_heatmap] + [None] + [None], 'y': [y_heatmap] + [None] + [None], 'z': [z_heatmap] + [None] + [None], 'ids': [None] + [treemap_ids] + [None], 'labels': [None] + [treemap_labels] + [None], 'parents': [None] + [treemap_parents] + [None], 'values': [None] + [treemap_values] + [None], 'label': [None] + [None] + [sankey_labels], 'color':[None] + [None] + [node_colors], 'link': [None] + [None] + [link], 'hovertemplate':  ['x=%{x}<br>y=%{y}<br>z=%{z:.0f}']
+                                    + ['%{label}<br>%{value}'] + [None]}, {'title': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}", 'updatemenus[0].active': 0}
+            ]))
 
         buttons.append(dict(
             label='Small',
             method='relayout',
             args=[{'height': 600}],
             args2=[{'height': 800}]
-        )) 
-    
+        ))
+
         return buttons
 
     def update_layout_heatmap_treemap_sankey(fig, buttons):
@@ -3122,7 +3424,7 @@ def graph_analysis(df, cat_coluns, num_column):
                     xanchor="left",
                     y=1.05,
                     yanchor="bottom"
-                ),        
+                ),
                 dict(
                     type="buttons",
                     direction="left",
@@ -3133,18 +3435,18 @@ def graph_analysis(df, cat_coluns, num_column):
                     xanchor="left",
                     y=1.05,
                     yanchor="bottom"
-                ),                 
+                ),
                 dict(
                     type="buttons",
                     direction="left",
                     buttons=buttons[5:8],  # first 3 buttons (Bar, Line, Area)
-                    pad={"l": 380,"r": 10, "t": 70},
+                    pad={"l": 380, "r": 10, "t": 70},
                     showactive=True,
                     x=0,
                     xanchor="left",
                     y=1.05,
                     yanchor="bottom"
-                ),          
+                ),
                 dict(
                     type="buttons",
                     direction="left",
@@ -3155,32 +3457,27 @@ def graph_analysis(df, cat_coluns, num_column):
                     xanchor="left",
                     y=1.05,
                     yanchor="bottom"
-                ),                                                                                                                   
+                ),
             ]
         )
 
     fig = create_bars_lines_area_figure(config)
     buttons = create_buttons_bars_lines_ares(config)
     update_layout_bars_lines_ares(fig, buttons)
-    fig.update_layout(height = 600
-                    , title={'text': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}", 'y': 0.92}
-                    , xaxis={'title': None}
-                    , yaxis={'title': None}
-                    #   , margin=dict(l=50, r=50, b=50, t=70),
-                    )
+    fig.update_layout(height=600, title={'text': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}", 'y': 0.92}, xaxis={'title': None}, yaxis={'title': None}
+                      #   , margin=dict(l=50, r=50, b=50, t=70),
+                      )
     fig.show()
 
     fig = create_heatmap_treemap_sankey_figure(config)
     buttons = create_buttons_heatmap_treemap_sankey(config)
     update_layout_heatmap_treemap_sankey(fig, buttons)
 
-    fig.update_layout(height = 600
-                    , title={'text': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}", 'y': 0.92}
-                    , xaxis={'title': None}
-                    , yaxis={'title': None}
-                    #   , margin=dict(l=50, r=50, b=50, t=70),
-                    )
+    fig.update_layout(height=600, title={'text': f"num = {config['num_column_y']}&nbsp;&nbsp;&nbsp;&nbsp; cat1 = {config['cat_columns'][0]}&nbsp;&nbsp;&nbsp;&nbsp; cat2 = {config['cat_columns'][1]}", 'y': 0.92}, xaxis={'title': None}, yaxis={'title': None}
+                      #   , margin=dict(l=50, r=50, b=50, t=70),
+                      )
     fig.show()
+
 
 def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series, equal_var=False) -> float:
     """
@@ -3214,19 +3511,21 @@ def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series, equal_var=False) 
 
     if equal_var:
         # Calculate pooled standard deviation
-        pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+        pooled_std = np.sqrt(
+            ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
         cohens_d = (mean1 - mean2) / pooled_std
     else:
         varn1 = var1 / n1
         varn2 = var2 / n2
-        standard_error = np.sqrt(varn1 + varn2)  
+        standard_error = np.sqrt(varn1 + varn2)
         cohens_d = (mean1 - mean2) / standard_error
 
+    return cohens_d
 
-    return cohens_d   
-    
 # Хи-квадрат Пирсона
-# Не чувствителен к гетероскедастичности (неравномерной дисперсии) данных.    
+# Не чувствителен к гетероскедастичности (неравномерной дисперсии) данных.
+
+
 def chi2_pearson(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform Pearson's chi-squared test for independence between two categorical variables.
@@ -3236,7 +3535,7 @@ def chi2_pearson(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, re
     - column2 (pd.Series): Second categorical variable
     - alpha (float, optional): Significance level (default: 0.05)
     - return_results (bool, optional): Return (chi2, p_value, dof, expected) instead of printing (default=False).
-    
+
     Returns:
     - If return_results is False: 
     None
@@ -3251,29 +3550,34 @@ def chi2_pearson(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, re
             The expected frequencies, based on the marginal sums of the table.
     """
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not all(isinstance(sample, pd.Series) for sample in [sample1, sample2]):
-        raise ValueError("Input samples must be pd.Series")      
+        raise ValueError("Input samples must be pd.Series")
     if not all(len(sample) > 0 for sample in [sample1, sample2]):
-        raise ValueError("All samples must have at least one value")   
+        raise ValueError("All samples must have at least one value")
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if sample1.isna().sum() or sample2.isna().sum():
-        raise ValueError(f'column1 and column2 must not have missing values.\ncolumn1 have {sample1.isna().sum()} missing values\ncolumn2 have {sample2.isna().sum()} missing values')
+        raise ValueError(
+            f'column1 and column2 must not have missing values.\ncolumn1 have {sample1.isna().sum()} missing values\ncolumn2 have {sample2.isna().sum()} missing values')
     crosstab_for_chi2_pearson = pd.crosstab(sample1, sample2)
-    chi2, p_value, dof, expected = stats.chi2_contingency(crosstab_for_chi2_pearson)
- 
+    chi2, p_value, dof, expected = stats.chi2_contingency(
+        crosstab_for_chi2_pearson)
+
     if not return_results:
         print('Хи-квадрат Пирсона')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return chi2, p_value, dof, expected
-    
+
+
 def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, equal_var=False, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
     Perform t-test for independent samples.
@@ -3299,9 +3603,10 @@ def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, equal_var=False, alterna
             The probability of Type II error (beta).
         - cohens_d : (float)
             The effect size (Cohen's d).
-    """ 
+    """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3310,23 +3615,25 @@ def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, equal_var=False, alterna
         "smaller": "less",
         "s": "less"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input df must be pd.DataFrame")          
+        raise ValueError("Input df must be pd.DataFrame")
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")            
-    
+        raise ValueError("Input DataFrame must have exactly two columns")
+
     sample_column = df.iloc[:, 0]
     value_column = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(value_column):
-        raise ValueError("Value column must contain numeric values")    
+        raise ValueError("Value column must contain numeric values")
     if sample_column.isna().sum() or value_column.isna().sum():
-        raise ValueError(f'sample_column and value_column must not have missing values.\nsample_column have {sample_column.isna().sum()} missing values\nvalue_column have {value_column.isna().sum()} missing values')
+        raise ValueError(
+            f'sample_column and value_column must not have missing values.\nsample_column have {sample_column.isna().sum()} missing values\nvalue_column have {value_column.isna().sum()} missing values')
     unique_samples = sample_column.unique()
     if len(unique_samples) != 2:
-        raise ValueError("Sample column must contain exactly two unique labels")
+        raise ValueError(
+            "Sample column must contain exactly two unique labels")
 
     sample1 = value_column[sample_column == unique_samples[0]]
     sample2 = value_column[sample_column == unique_samples[1]]
@@ -3337,32 +3644,38 @@ def ttest_ind_df(df: pd.DataFrame, alpha: float = 0.05, equal_var=False, alterna
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
-        
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+
     nobs1 = len(sample1)
     nobs2 = len(sample2)
     # Calculate Cohen's d
     cohens_d = calculate_cohens_d(sample1, sample2, equal_var=equal_var)
     # Calculate the power of the test
-    power = sm.stats.TTestIndPower().solve_power(effect_size=cohens_d, nobs1=nobs1, ratio=nobs2/nobs1, alpha=alpha)
+    power = sm.stats.TTestIndPower().solve_power(
+        effect_size=cohens_d, nobs1=nobs1, ratio=nobs2/nobs1, alpha=alpha)
     # Calculate the type II error rate (β)
     beta = 1 - power
-            
-    statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=equal_var, alternative=alternative)
-    
+
+    statistic, p_value = stats.ttest_ind(
+        sample1, sample2, equal_var=equal_var, alternative=alternative)
+
     if not return_results:
         print('T-критерий')
         print('p-value = ', p_value)
         print('alpha = ', alpha)
         print('beta = ', beta)
-        
+
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return statistic, p_value, beta, cohens_d
-      
+
+
 def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, equal_var=False, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
     Perform t-test for independent samples.
@@ -3387,9 +3700,10 @@ def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, equal
             The probability of Type II error (beta).
         - cohens_d : (float)
             The effect size (Cohen's d).
-    """ 
+    """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3398,17 +3712,18 @@ def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, equal
         "smaller": "less",
         "s": "less"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not all(isinstance(sample, pd.Series) for sample in [sample1, sample2]):
-        raise ValueError("Input samples must be pd.Series")      
+        raise ValueError("Input samples must be pd.Series")
     if not all(len(sample) > 0 for sample in [sample1, sample2]):
-        raise ValueError("All samples must have at least one value")       
+        raise ValueError("All samples must have at least one value")
     if not pd.api.types.is_numeric_dtype(sample1) or not pd.api.types.is_numeric_dtype(sample2):
-        raise ValueError("sample1 and sample2 must contain numeric values")    
+        raise ValueError("sample1 and sample2 must contain numeric values")
     if sample1.isna().sum() or sample2.isna().sum():
-        raise ValueError(f'sample1 and sample2 must not have missing values.\nsample1 have {sample1.isna().sum()} missing values\nsample2 have {sample2.isna().sum()} missing values')
+        raise ValueError(
+            f'sample1 and sample2 must not have missing values.\nsample1 have {sample1.isna().sum()} missing values\nsample2 have {sample2.isna().sum()} missing values')
     warning_issued = False
     for sample in [sample1, sample2]:
         if len(sample) < 2:
@@ -3416,31 +3731,36 @@ def ttest_ind(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, equal
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))     
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     nobs1 = len(sample1)
     nobs2 = len(sample2)
     # Calculate Cohen's d
     cohens_d = calculate_cohens_d(sample1, sample2, equal_var=equal_var)
     # Calculate the power of the test
-    power = sm.stats.TTestIndPower().solve_power(effect_size=cohens_d, nobs1=nobs1, ratio=nobs2/nobs1, alpha=alpha)
+    power = sm.stats.TTestIndPower().solve_power(
+        effect_size=cohens_d, nobs1=nobs1, ratio=nobs2/nobs1, alpha=alpha)
     # Calculate the type II error rate (β)
-    beta = 1 - power          
-    statistic, p_value = stats.ttest_ind(sample1, sample2, equal_var=equal_var, alternative=alternative)
-    
+    beta = 1 - power
+    statistic, p_value = stats.ttest_ind(
+        sample1, sample2, equal_var=equal_var, alternative=alternative)
 
     if not return_results:
         print('T-критерий Уэлча')
         print('p-value = ', p_value)
         print('alpha = ', alpha)
         print('beta = ', beta)
-        
+
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return statistic, p_value, beta, cohens_d
-    
+
+
 def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
     Perform the Mann-Whitney U rank test on two independent samples.
@@ -3460,9 +3780,10 @@ def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 't
             The Mann-Whitney U statistic corresponding with sample x. See Notes for the test statistic corresponding with sample y.
         - pvalue : (float)
             The associated *p*-value for the chosen alternative.
-    """ 
+    """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3471,22 +3792,24 @@ def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 't
         "smaller": "less",
         "s": "less"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input df must be pd.DataFrame")      
+        raise ValueError("Input df must be pd.DataFrame")
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")      
+        raise ValueError("Input DataFrame must have exactly two columns")
     sample_column = df.iloc[:, 0]
     value_column = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(value_column):
-        raise ValueError("Value column must contain numeric values")    
+        raise ValueError("Value column must contain numeric values")
     if sample_column.isna().sum() or value_column.isna().sum():
-        raise ValueError(f'sample_column and value_column must not have missing values.\nsample_column have {sample_column.isna().sum()} missing values\nvalue_column have {value_column.isna().sum()} missing values')
+        raise ValueError(
+            f'sample_column and value_column must not have missing values.\nsample_column have {sample_column.isna().sum()} missing values\nvalue_column have {value_column.isna().sum()} missing values')
     unique_samples = sample_column.unique()
     if len(unique_samples) != 2:
-        raise ValueError("Sample column must contain exactly two unique labels")
+        raise ValueError(
+            "Sample column must contain exactly two unique labels")
 
     sample1_values = value_column[sample_column == unique_samples[0]]
     sample2_values = value_column[sample_column == unique_samples[1]]
@@ -3497,20 +3820,25 @@ def mannwhitneyu_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 't
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))       
-    statistic, p_value = stats.mannwhitneyu(sample1_values, sample2_values, alternative=alternative)
-    
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+    statistic, p_value = stats.mannwhitneyu(
+        sample1_values, sample2_values, alternative=alternative)
+
     if not return_results:
         print('U-критерий Манна-Уитни')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return statistic, p_value
-    
+
+
 def mannwhitneyu(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
     Perform the Mann-Whitney U rank test on two independent samples.
@@ -3529,9 +3857,10 @@ def mannwhitneyu(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, al
             The Mann-Whitney U statistic corresponding with sample x. See Notes for the test statistic corresponding with sample y.
         - pvalue : (float)
             The associated *p*-value for the chosen alternative.
-    """ 
+    """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3540,17 +3869,18 @@ def mannwhitneyu(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, al
         "smaller": "less",
         "s": "less"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not all(isinstance(sample, pd.Series) for sample in [sample1, sample2]):
-        raise ValueError("Input samples must be pd.Series")    
+        raise ValueError("Input samples must be pd.Series")
     if not all(len(sample) > 0 for sample in [sample1, sample2]):
-        raise ValueError("All samples must have at least one value")       
+        raise ValueError("All samples must have at least one value")
     if not pd.api.types.is_numeric_dtype(sample1) or not pd.api.types.is_numeric_dtype(sample2):
-        raise ValueError("sample1 and sample2 must contain numeric values")    
+        raise ValueError("sample1 and sample2 must contain numeric values")
     if sample1.isna().sum() or sample2.isna().sum():
-        raise ValueError(f'sample1 and sample2 must not have missing values.\nsample1 have {sample1.isna().sum()} missing values\nsample2 have {sample2.isna().sum()} missing values')
+        raise ValueError(
+            f'sample1 and sample2 must not have missing values.\nsample1 have {sample1.isna().sum()} missing values\nsample2 have {sample2.isna().sum()} missing values')
     warning_issued = False
     for sample in [sample1, sample2]:
         if len(sample) < 2:
@@ -3558,19 +3888,24 @@ def mannwhitneyu(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, al
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))    
-    statistic, p_value = stats.mannwhitneyu(sample1, sample2, alternative=alternative)
-    
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+    statistic, p_value = stats.mannwhitneyu(
+        sample1, sample2, alternative=alternative)
+
     if not return_results:
         print('U-критерий Манна-Уитни')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return statistic, p_value
+
 
 def proportion_ztest_1sample(count: int, n: int, p0: float, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
@@ -3593,7 +3928,8 @@ def proportion_ztest_1sample(count: int, n: int, p0: float, alpha: float = 0.05,
             p-value for the z-test
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3602,29 +3938,31 @@ def proportion_ztest_1sample(count: int, n: int, p0: float, alpha: float = 0.05,
         "smaller": "smaller",
         "s": "smaller"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not all(isinstance(x, int) for x in [count, n]):
         raise ValueError("count and n must be integers")
     if not isinstance(p0, float) or p0 < 0 or p0 > 1:
         raise ValueError("p0 must be a float between 0 and 1")
-    
-    z_stat, p_value = stm.proportions_ztest(count=count, nobs=n, value=p0, alternative=alternative)
-    
+
+    z_stat, p_value = stm.proportions_ztest(
+        count=count, nobs=n, value=p0, alternative=alternative)
+
     if not return_results:
         print('Один выборочный Z-тест для доли')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return z_stat, p_value
 
 
-    
 def proportions_ztest_2sample(count1: int, count2: int, n1: int, n2: int, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
     Perform a z-test for proportions.
@@ -3647,7 +3985,8 @@ def proportions_ztest_2sample(count1: int, count2: int, n1: int, n2: int, alpha:
             p-value for the z-test
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3656,27 +3995,31 @@ def proportions_ztest_2sample(count1: int, count2: int, n1: int, n2: int, alpha:
         "smaller": "smaller",
         "s": "smaller"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not all(isinstance(x, int) for x in [count1, count2, n1, n2]):
         raise ValueError("All input parameters must be integers")
     count = [count1, count2]
     nobs = [n1, n2]
-    z_stat, p_value = stm.proportions_ztest(count=count, nobs=nobs, alternative=alternative)
-    
+    z_stat, p_value = stm.proportions_ztest(
+        count=count, nobs=nobs, alternative=alternative)
+
     if not return_results:
         print('Z тест для долей')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return z_stat, p_value
-        
-def proportions_ztest_column_2sample(column: pd.Series, alpha: float=0.05, alternative: str='two-sided', return_results: bool = False):
+
+
+def proportions_ztest_column_2sample(column: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False):
     """
     Perform a z-test for proportions on a single column.
 
@@ -3685,7 +4028,7 @@ def proportions_ztest_column_2sample(column: pd.Series, alpha: float=0.05, alter
     - alpha (float, optional): The significance level (default=0.05).
     - alternative (str, optional): The alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default='two-sided').
     - return_results (bool, optional): Return (z_stat, p_value) instead of printing (default=False).
-    
+
     Returns:
     - If return_results is False: None
     - If return_results is True
@@ -3695,7 +4038,8 @@ def proportions_ztest_column_2sample(column: pd.Series, alpha: float=0.05, alter
             p-value for the z-test
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3704,18 +4048,20 @@ def proportions_ztest_column_2sample(column: pd.Series, alpha: float=0.05, alter
         "smaller": "smaller",
         "s": "smaller"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(column, pd.Series):
-        raise ValueError("Input column must be pd.Series")        
+        raise ValueError("Input column must be pd.Series")
     if len(column) < 1:
-        raise ValueError("Input column must have at least one value")      
+        raise ValueError("Input column must have at least one value")
     if column.isna().sum():
-        raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
+        raise Exception(
+            f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
 
     if column.unique().size != 2:
-        raise Exception(f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
+        raise Exception(
+            f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
 
     value_counts = column.value_counts()
     count1 = value_counts.values[0]
@@ -3724,24 +4070,29 @@ def proportions_ztest_column_2sample(column: pd.Series, alpha: float=0.05, alter
     if count1 < 2 or count2 < 2:
         raise ValueError("Each sample must have at least two elements")
     elif count1 < 30 or count2 < 30:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))      
-    
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+
     n1 = n2 = column.size
     count = [count1, count2]
     nobs = [n1, n2]
 
-    z_stat, p_value = stm.proportions_ztest(count=count, nobs=nobs, alternative=alternative)
+    z_stat, p_value = stm.proportions_ztest(
+        count=count, nobs=nobs, alternative=alternative)
     if not return_results:
         print('Z тест для долей')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return z_stat, p_value                                               
-    
+        return z_stat, p_value
+
+
 def proportions_chi2(count1: int, count2: int, n1: int, n2: int, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False) -> None:
     """
     Perform a chi-squared test for proportions.
@@ -3764,7 +4115,8 @@ def proportions_chi2(count1: int, count2: int, n1: int, n2: int, alpha: float = 
             p-value for the chi-squared test
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3773,26 +4125,30 @@ def proportions_chi2(count1: int, count2: int, n1: int, n2: int, alpha: float = 
         "smaller": "smaller",
         "s": "smaller"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not all(isinstance(x, int) for x in [count1, count2, n1, n2]):
         raise ValueError("All input parameters must be integers")
-    
-    chi2_stat, p_value = stm.test_proportions_2indep(count1, n1, count2, n2, alternative=alternative).tuple 
-    
+
+    chi2_stat, p_value = stm.test_proportions_2indep(
+        count1, n1, count2, n2, alternative=alternative).tuple
+
     if not return_results:
         print('Хи-квадрат тест для долей')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return chi2_stat, p_value
 
-def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: str='two-sided', return_results: bool = False):
+
+def proportions_chi2_column(column: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided', return_results: bool = False):
     """
     Perform a chi-squared test for proportions on a single column.
 
@@ -3801,7 +4157,7 @@ def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: s
     - alpha (float, optional): The significance level (default=0.05).
     - alternative (str, optional): The alternative hypothesis ('two-sided', '2s', 'larger', 'l', 'smaller', 's') (default='two-sided').
     - return_results (bool, optional): Return (chi2_stat, p_value) instead of printing (default=False).
-    
+
     Returns:
     - If return_results is False: None
     - If return_results is True
@@ -3811,7 +4167,8 @@ def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: s
             p-value for the chi-squared test
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -3820,37 +4177,43 @@ def proportions_chi2_column(column: pd.Series, alpha: float=0.05, alternative: s
         "smaller": "smaller",
         "s": "smaller"
     }
-    alternative = alternative_map[alternative] 
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")    
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(column, pd.Series):
-        raise ValueError("Input column must be pd.Series")    
+        raise ValueError("Input column must be pd.Series")
     if len(column) < 1:
-        raise ValueError("Input column must have at least one value")       
+        raise ValueError("Input column must have at least one value")
     if column.isna().sum():
-        raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
+        raise Exception(
+            f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
 
     if column.unique().size != 2:
-        raise Exception(f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
+        raise Exception(
+            f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
 
     value_counts = column.value_counts()
     count1 = value_counts.values[0]
     count2 = value_counts.values[1]
     n1 = n2 = column.size
 
-    chi2_stat, p_value = stm.test_proportions_2indep(count1, n1, count2, n2, alternative=alternative).tuple 
-    
+    chi2_stat, p_value = stm.test_proportions_2indep(
+        count1, n1, count2, n2, alternative=alternative).tuple
+
     if not return_results:
         print('Хи-квадрат тест для долей')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return chi2_stat, p_value
-    
+
+
 def anova_oneway_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a one-way ANOVA test.
@@ -3873,15 +4236,16 @@ def anova_oneway_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool 
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input df must be pd.DataFrame")      
+        raise ValueError("Input df must be pd.DataFrame")
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")  
+        raise ValueError("Input DataFrame must have exactly two columns")
     labels = df.iloc[:, 0]
     values = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(values):
         raise ValueError("Value column must contain numeric values")
     if labels.isna().sum() or values.isna().sum():
-        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+        raise ValueError(
+            f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
     unique_labels = labels.unique()
     if len(unique_labels) < 2:
         raise ValueError("Labels must contain at least two unique values")
@@ -3894,20 +4258,24 @@ def anova_oneway_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool 
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))    
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     statistic, p_value = stats.f_oneway(*samples)
-    
+
     if not return_results:
         print('Однофакторный дисперсионный анализ')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return statistic, p_value    
-    
+        return statistic, p_value
+
+
 def anova_oneway(samples: list, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a one-way ANOVA test.
@@ -3942,19 +4310,23 @@ def anova_oneway(samples: list, alpha: float = 0.05, return_results: bool = Fals
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     statistic, p_value = stats.f_oneway(*samples)
     if not return_results:
         print('Однофакторный дисперсионный анализ')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return statistic, p_value
-    
+
+
 def tukey_hsd_df(df: pd.DataFrame, alpha: float = 0.05) -> None:
     """
     Perform a Tukey's HSD test for pairwise comparisons.   
@@ -3972,23 +4344,24 @@ def tukey_hsd_df(df: pd.DataFrame, alpha: float = 0.05) -> None:
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input df must be pd.DataFrame")      
+        raise ValueError("Input df must be pd.DataFrame")
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")    
+        raise ValueError("Input DataFrame must have exactly two columns")
     labels = df.iloc[:, 0]
     values = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(values):
         raise ValueError("Value column must contain numeric values")
     if labels.isna().sum() or values.isna().sum():
-        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+        raise ValueError(
+            f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
     unique_labels = labels.unique()
     if len(unique_labels) < 2:
         raise ValueError("Labels must contain at least two unique values")
 
     tukey = pairwise_tukeyhsd(endog=values, groups=labels, alpha=alpha)
     print(tukey)
-    
-    
+
+
 def anova_oneway_welch_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a one-way ANOVA test using Welch's ANOVA. It is more reliable when the two samples   
@@ -4016,35 +4389,40 @@ def anova_oneway_welch_df(df: pd.DataFrame, alpha: float = 0.05, return_results:
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input df must be pd.DataFrame")      
+        raise ValueError("Input df must be pd.DataFrame")
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")  
+        raise ValueError("Input DataFrame must have exactly two columns")
     labels_column = df.columns[0]
-    value_column = df.columns[1]      
+    value_column = df.columns[1]
     labels = df[labels_column]
     values = df[value_column]
 
     if not pd.api.types.is_numeric_dtype(values):
         raise ValueError("Value column must contain numeric values")
     if labels.isna().sum() or values.isna().sum():
-        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+        raise ValueError(
+            f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
     unique_labels = labels.unique()
     if len(unique_labels) < 2:
         raise ValueError("Labels must contain at least two unique values")
 
-    anova_results = pg.welch_anova(dv=value_column, between=labels_column, data=df)
+    anova_results = pg.welch_anova(
+        dv=value_column, between=labels_column, data=df)
     p_value = anova_results['p-unc'][0]
     if not return_results:
         print('Однофакторный дисперсионный анализ Welch')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return anova_results  
-    
+        return anova_results
+
+
 def kruskal_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a Kruskal-Wallis test. The Kruskal-Wallis H-test tests the null hypothesis  
@@ -4068,15 +4446,16 @@ def kruskal_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = Fal
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input df must be pd.DataFrame")      
+        raise ValueError("Input df must be pd.DataFrame")
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")  
+        raise ValueError("Input DataFrame must have exactly two columns")
     labels = df.iloc[:, 0]
     values = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(values):
         raise ValueError("Value column must contain numeric values")
     if labels.isna().sum() or values.isna().sum():
-        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+        raise ValueError(
+            f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
     unique_labels = labels.unique()
     if len(unique_labels) < 2:
         raise ValueError("Labels must contain at least two unique values")
@@ -4089,20 +4468,24 @@ def kruskal_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = Fal
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))    
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     statistic, p_value = stats.kruskal(*samples)
-    
+
     if not return_results:
         print('Тест Краскела-Уоллиса (H-критерий)')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return statistic, p_value    
-    
+        return statistic, p_value
+
+
 def kruskal(samples: list, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a Kruskal-Wallis test. The Kruskal-Wallis H-test tests the null hypothesis  
@@ -4138,19 +4521,23 @@ def kruskal(samples: list, alpha: float = 0.05, return_results: bool = False) ->
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     statistic, p_value = stats.kruskal(*samples)
     if not return_results:
         print('Тест Краскела-Уоллиса (H-критерий)')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return statistic, p_value    
-    
+        return statistic, p_value
+
+
 def levene_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a Levene's test. Levene's test is a statistical test used to check if the variances of multiple samples are equal.
@@ -4173,15 +4560,16 @@ def levene_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = Fals
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input df must be pd.DataFrame")      
+        raise ValueError("Input df must be pd.DataFrame")
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")  
+        raise ValueError("Input DataFrame must have exactly two columns")
     labels = df.iloc[:, 0]
     values = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(values):
         raise ValueError("Value column must contain numeric values")
     if labels.isna().sum() or values.isna().sum():
-        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+        raise ValueError(
+            f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
     unique_labels = labels.unique()
     if len(unique_labels) < 2:
         raise ValueError("Labels must contain at least two unique values")
@@ -4194,20 +4582,24 @@ def levene_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = Fals
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red')) 
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     statistic, p_value = stats.levene(*samples)
-    
+
     if not return_results:
         print('Тест Левена')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
         return statistic, p_value
-    
+
+
 def levene(samples: list, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a Levene's test. Levene's test is a statistical test used to check if the variances of multiple samples are equal.
@@ -4242,20 +4634,24 @@ def levene(samples: list, alpha: float = 0.05, return_results: bool = False) -> 
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
-        
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+
     statistic, p_value = stats.levene(*samples)
     if not return_results:
         print('Тест Левена на гомогенность дисперсии')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return statistic, p_value        
-    
+        return statistic, p_value
+
+
 def bartlett_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a Bartlett's test. Bartlett's test is a statistical test used to check if the variances of multiple samples are equal.
@@ -4278,15 +4674,16 @@ def bartlett_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = Fa
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input df must be pd.DataFrame")      
+        raise ValueError("Input df must be pd.DataFrame")
     if df.shape[1] != 2:
-        raise ValueError("Input DataFrame must have exactly two columns")  
+        raise ValueError("Input DataFrame must have exactly two columns")
     labels = df.iloc[:, 0]
     values = df.iloc[:, 1]
     if not pd.api.types.is_numeric_dtype(values):
         raise ValueError("Value column must contain numeric values")
     if labels.isna().sum() or values.isna().sum():
-        raise ValueError(f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
+        raise ValueError(
+            f'labels and values must not have missing values.\nlabels have {labels.isna().sum()} missing values\nvalues have {values.isna().sum()} missing values')
     unique_labels = labels.unique()
     if len(unique_labels) < 2:
         raise ValueError("Labels must contain at least two unique values")
@@ -4299,20 +4696,24 @@ def bartlett_df(df: pd.DataFrame, alpha: float = 0.05, return_results: bool = Fa
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red')) 
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     statistic, p_value = stats.bartlett(*samples)
-    
+
     if not return_results:
         print('Тест Бартлетта')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return statistic, p_value    
-    
+        return statistic, p_value
+
+
 def bartlett(samples: list, alpha: float = 0.05, return_results: bool = False) -> None:
     """
     Perform a Bartlett's test. Bartlett's test is a statistical test used to check if the variances of multiple samples are equal.
@@ -4347,20 +4748,24 @@ def bartlett(samples: list, alpha: float = 0.05, return_results: bool = False) -
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     statistic, p_value = stats.bartlett(*samples)
     if not return_results:
         print('Тест Бартлетта')
         print('alpha = ', alpha)
         print('p-value = ', p_value)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
     else:
-        return statistic, p_value    
-    
-def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05, alternative: str='two-sided', equal_var=False) -> tuple:
+        return statistic, p_value
+
+
+def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided', equal_var=False) -> tuple:
     """
     Calculate the confidence interval using t-statistic for the difference in means between two samples.
 
@@ -4389,7 +4794,8 @@ def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05
             "larger".
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -4397,8 +4803,8 @@ def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05
         "l": "larger",
         "smaller": "smaller",
         "s": "smaller"
-    }    
-    alternative = alternative_map[alternative] 
+    }
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Check if samples are Pandas Series objects
@@ -4411,7 +4817,8 @@ def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     # Calculate means and variances
     mean1, var1 = sample1.mean(), sample1.var(ddof=1)
     mean2, var2 = sample2.mean(), sample2.var(ddof=1)
@@ -4422,7 +4829,8 @@ def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05
 
     if equal_var:
         # Calculate pooled standard deviation
-        pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+        pooled_std = np.sqrt(
+            ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
         standard_error = pooled_std * np.sqrt(1/n1 + 1/n2)
 
         dof = n1 + n2 - 2
@@ -4430,8 +4838,7 @@ def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05
         varn1 = var1 / n1
         varn2 = var2 / n2
         dof = (varn1 + varn2)**2 / (varn1**2 / (n1 - 1) + varn2**2 / (n2 - 1))
-        standard_error = np.sqrt(varn1 + varn2)        
-
+        standard_error = np.sqrt(varn1 + varn2)
 
     # Calculate critical value and confidence interval bounds
     if alternative in ["two-sided", "2s"]:
@@ -4449,7 +4856,8 @@ def confint_t_2samples(sample1: pd.Series, sample2: pd.Series, alpha: float=0.05
 
     return lower, upper
 
-def confint_t_1sample(sample: pd.Series, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+
+def confint_t_1sample(sample: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided') -> tuple:
     """
     Calculate the confidence interval using t-statistic for the mean of one sample.
 
@@ -4476,7 +4884,8 @@ def confint_t_1sample(sample: pd.Series, alpha: float=0.05, alternative: str='tw
             "larger".
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -4484,8 +4893,8 @@ def confint_t_1sample(sample: pd.Series, alpha: float=0.05, alternative: str='tw
         "l": "larger",
         "smaller": "smaller",
         "s": "smaller"
-    }    
-    alternative = alternative_map[alternative] 
+    }
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Check if sample is Pandas Series object
@@ -4494,7 +4903,8 @@ def confint_t_1sample(sample: pd.Series, alpha: float=0.05, alternative: str='tw
     if len(sample) < 2:
         raise ValueError("Sample must have at least two elements")
     elif len(sample) < 30:
-        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+        print(colored(
+            "Warning: Sample size is less than 30. Results may be unreliable.", 'red'))
     # Calculate mean and variance
     mean, var = sample.mean(), sample.var(ddof=1)
 
@@ -4522,9 +4932,9 @@ def confint_t_1sample(sample: pd.Series, alpha: float=0.05, alternative: str='tw
         upper = mean + tcrit * standard_error
 
     return lower, upper
-    
-    
-def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str='two-sided', equal_var=False) -> tuple:
+
+
+def confint_t_2samples_df(df: pd.DataFrame, alpha: float = 0.05, alternative: str = 'two-sided', equal_var=False) -> tuple:
     """
     Calculate the confidence interval using t-statistic for the difference in means between two samples.
 
@@ -4553,7 +4963,8 @@ def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str=
             "larger".
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -4561,8 +4972,8 @@ def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str=
         "l": "larger",
         "smaller": "smaller",
         "s": "smaller"
-    }    
-    alternative = alternative_map[alternative] 
+    }
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Check if input is a Pandas DataFrame
@@ -4570,24 +4981,24 @@ def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str=
         raise ValueError("Input must be a Pandas DataFrame")
     if df.shape[1] != 2:
         raise ValueError("Input DataFrame must have exactly two columns")
-    
+
     # Extract labels and values from the DataFrame
     labels = df.iloc[:, 0]
     values = df.iloc[:, 1]
-    
+
     # Check if values are numeric
     if not pd.api.types.is_numeric_dtype(values):
         raise ValueError("Values must be numeric")
-    
+
     # Check for missing values
     if labels.isna().sum() or values.isna().sum():
         raise ValueError("Labels and values must not have missing values")
-    
+
     # Extract unique labels
     unique_labels = labels.unique()
     if len(unique_labels) != 2:
         raise ValueError("Labels must contain exactly two unique values")
-    
+
     # Split values into two samples based on labels
     sample1 = values[labels == unique_labels[0]]
     sample2 = values[labels == unique_labels[1]]
@@ -4598,7 +5009,8 @@ def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str=
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))      
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     # Calculate means and variances
     mean1, var1 = sample1.mean(), sample1.var(ddof=1)
     mean2, var2 = sample2.mean(), sample2.var(ddof=1)
@@ -4608,7 +5020,8 @@ def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str=
     n2 = len(sample2)
     if equal_var:
         # Calculate pooled standard deviation
-        pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+        pooled_std = np.sqrt(
+            ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
         standard_error = pooled_std * np.sqrt(1/n1 + 1/n2)
 
         dof = n1 + n2 - 2
@@ -4616,8 +5029,7 @@ def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str=
         varn1 = var1 / n1
         varn2 = var2 / n2
         dof = (varn1 + varn2)**2 / (varn1**2 / (n1 - 1) + varn2**2 / (n2 - 1))
-        standard_error = np.sqrt(varn1 + varn2)        
-
+        standard_error = np.sqrt(varn1 + varn2)
 
     # Calculate critical value and confidence interval bounds
     if alternative in ["two-sided", "2s"]:
@@ -4635,7 +5047,8 @@ def confint_t_2samples_df(df: pd.DataFrame, alpha: float=0.05, alternative: str=
 
     return lower, upper
 
-def confint_proportion_ztest_1sample_column(sample: pd.Series, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+
+def confint_proportion_ztest_1sample_column(sample: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided') -> tuple:
     """
     Calculate the confidence interval for a proportion in one sample containing 0 or 1.
 
@@ -4662,7 +5075,8 @@ def confint_proportion_ztest_1sample_column(sample: pd.Series, alpha: float=0.05
             "larger".
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -4670,11 +5084,11 @@ def confint_proportion_ztest_1sample_column(sample: pd.Series, alpha: float=0.05
         "l": "larger",
         "smaller": "smaller",
         "s": "smaller"
-    }    
-    alternative = alternative_map[alternative] 
+    }
+    alternative = alternative_map[alternative]
     # Check if sample contains only 0 and 1
     if not ((sample == 0) | (sample == 1)).all():
-        raise ValueError("Sample must contain only 0 and 1")      
+        raise ValueError("Sample must contain only 0 and 1")
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Check if sample is Pandas Series object
@@ -4683,7 +5097,8 @@ def confint_proportion_ztest_1sample_column(sample: pd.Series, alpha: float=0.05
     if len(sample) < 2:
         raise ValueError("Sample must have at least two elements")
     elif len(sample) < 30:
-        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+        print(colored(
+            "Warning: Sample size is less than 30. Results may be unreliable.", 'red'))
     # Calculate proportion
     p = sample.mean()
 
@@ -4706,7 +5121,8 @@ def confint_proportion_ztest_1sample_column(sample: pd.Series, alpha: float=0.05
 
     return lower, upper
 
-def confint_proportion_ztest_1sample(count: int, nobs: int, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+
+def confint_proportion_ztest_1sample(count: int, nobs: int, alpha: float = 0.05, alternative: str = 'two-sided') -> tuple:
     """
     Calculate the confidence interval for a proportion in one sample.
 
@@ -4734,7 +5150,8 @@ def confint_proportion_ztest_1sample(count: int, nobs: int, alpha: float=0.05, a
             "larger".
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -4742,8 +5159,8 @@ def confint_proportion_ztest_1sample(count: int, nobs: int, alpha: float=0.05, a
         "l": "larger",
         "smaller": "smaller",
         "s": "smaller"
-    }    
-    alternative = alternative_map[alternative] 
+    }
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Additional checks
@@ -4752,7 +5169,8 @@ def confint_proportion_ztest_1sample(count: int, nobs: int, alpha: float=0.05, a
     if count > nobs:
         raise ValueError("Count cannot be greater than sample size")
     elif nobs < 30:
-        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+        print(colored(
+            "Warning: Sample size is less than 30. Results may be unreliable.", 'red'))
     # Calculate proportion
     p = count / nobs
 
@@ -4775,7 +5193,8 @@ def confint_proportion_ztest_1sample(count: int, nobs: int, alpha: float=0.05, a
 
     return lower, upper
 
-def confint_proportion_ztest_2sample(count1: int, nobs1: int, count2: int, nobs2: int, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+
+def confint_proportion_ztest_2sample(count1: int, nobs1: int, count2: int, nobs2: int, alpha: float = 0.05, alternative: str = 'two-sided') -> tuple:
     """
     Calculate the confidence interval using normal distribution for the difference of two proportions.
 
@@ -4805,7 +5224,8 @@ def confint_proportion_ztest_2sample(count1: int, nobs1: int, count2: int, nobs2
             "larger".
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -4813,17 +5233,19 @@ def confint_proportion_ztest_2sample(count1: int, nobs1: int, count2: int, nobs2
         "l": "larger",
         "smaller": "smaller",
         "s": "smaller"
-    }    
-    alternative = alternative_map[alternative] 
+    }
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Additional checks
     if nobs1 < 2 or nobs2 < 2:
-        raise ValueError("Each sample (nobs1 and nobs2) must have at least two observations")
+        raise ValueError(
+            "Each sample (nobs1 and nobs2) must have at least two observations")
     if count1 > nobs1 or count2 > nobs2:
         raise ValueError("Count cannot be greater than sample size")
     elif nobs1 < 30 or nobs2 < 30:
-        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
+        print(colored(
+            "Warning: Sample size is less than 30. Results may be unreliable.", 'red'))
     # Calculate proportions
     p1 = count1 / nobs1
     p2 = count2 / nobs2
@@ -4847,7 +5269,8 @@ def confint_proportion_ztest_2sample(count1: int, nobs1: int, count2: int, nobs2
 
     return lower, upper
 
-def confint_proportion_ztest_column_2sample(column: pd.Series, alpha: float=0.05, alternative: str='two-sided') -> tuple:
+
+def confint_proportion_ztest_column_2sample(column: pd.Series, alpha: float = 0.05, alternative: str = 'two-sided') -> tuple:
     """
     Calculate the confidence interval using normal distribution for the difference of two proportions.
 
@@ -4874,7 +5297,8 @@ def confint_proportion_ztest_column_2sample(column: pd.Series, alpha: float=0.05
             "larger".
     """
     if alternative not in ["two-sided", "2s", "larger", "l", "smaller", "s"]:
-        raise Exception(f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
+        raise Exception(
+            f"alternative must be 'two-sided', '2s', 'larger', 'l', 'smaller', 's', but got {alternative}")
     alternative_map = {
         "two-sided": "two-sided",
         "2s": "two-sided",
@@ -4882,19 +5306,21 @@ def confint_proportion_ztest_column_2sample(column: pd.Series, alpha: float=0.05
         "l": "larger",
         "smaller": "smaller",
         "s": "smaller"
-    }    
-    alternative = alternative_map[alternative]  
+    }
+    alternative = alternative_map[alternative]
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")       
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Validate input column
     if not isinstance(column, pd.Series):
         raise ValueError("Input column must be pd.Series")
     if len(column) < 1:
         raise ValueError("Input column must have at least one value")
     if column.isna().sum():
-        raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
+        raise Exception(
+            f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
     if column.unique().size != 2:
-        raise Exception(f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
+        raise Exception(
+            f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
 
     value_counts = column.value_counts()
     count1 = value_counts.values[0]
@@ -4903,12 +5329,14 @@ def confint_proportion_ztest_column_2sample(column: pd.Series, alpha: float=0.05
 
     # Additional checks
     if nobs1 < 2 or nobs2 < 2:
-        raise ValueError("Each sample (nobs1 and nobs2) must have at least two observations")
+        raise ValueError(
+            "Each sample (nobs1 and nobs2) must have at least two observations")
     if count1 > nobs1 or count2 > nobs2:
         raise ValueError("Count cannot be greater than sample size")
     elif nobs1 < 30 or nobs2 < 30:
-        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))   
-        
+        print(colored(
+            "Warning: Sample size is less than 30. Results may be unreliable.", 'red'))
+
     # Calculate proportions
     p1 = count1 / nobs1
     p2 = count2 / nobs2
@@ -4930,9 +5358,10 @@ def confint_proportion_ztest_column_2sample(column: pd.Series, alpha: float=0.05
         lower = -1
         upper = (p1 - p2) + zcrit * standard_error
 
-    return lower, upper     
+    return lower, upper
 
-def confint_proportion_2sample_statsmodels(count1: int, nobs1: int, count2: int, nobs2: int, alpha: float=0.05) -> tuple:
+
+def confint_proportion_2sample_statsmodels(count1: int, nobs1: int, count2: int, nobs2: int, alpha: float = 0.05) -> tuple:
     """
     Calculate the confidence interval for the difference of two proportions only 'two-sided' alternative.
 
@@ -4959,16 +5388,20 @@ def confint_proportion_2sample_statsmodels(count1: int, nobs1: int, count2: int,
         raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Additional checks
     if nobs1 < 2 or nobs2 < 2:
-        raise ValueError("Each sample (nobs1 and nobs2) must have at least two observations")
+        raise ValueError(
+            "Each sample (nobs1 and nobs2) must have at least two observations")
     if count1 > nobs1 or count2 > nobs2:
         raise ValueError("Count cannot be greater than sample size")
     elif nobs1 < 30 or nobs2 < 30:
-        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))    
-    
-    lower, upper = stm.confint_proportions_2indep(count1=count1, nobs1=nobs1, count2=count2, nobs2=nobs2, alpha=alpha)
+        print(colored(
+            "Warning: Sample size is less than 30. Results may be unreliable.", 'red'))
+
+    lower, upper = stm.confint_proportions_2indep(
+        count1=count1, nobs1=nobs1, count2=count2, nobs2=nobs2, alpha=alpha)
     return lower, upper
 
-def confint_proportion_coluns_2sample_statsmodels(column: pd.Series, alpha: float=0.05) -> tuple:
+
+def confint_proportion_coluns_2sample_statsmodels(column: pd.Series, alpha: float = 0.05) -> tuple:
     """
     Calculate the confidence interval for the difference of two proportions only 'two-sided' alternative.
 
@@ -4989,16 +5422,18 @@ def confint_proportion_coluns_2sample_statsmodels(column: pd.Series, alpha: floa
             "larger".
     """
     if alpha < 0 or alpha > 1:
-        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")       
+        raise Exception(f"alpha must be between 0 and 1, but got {alpha}")
     # Validate input column
     if not isinstance(column, pd.Series):
         raise ValueError("Input column must be pd.Series")
     if len(column) < 1:
         raise ValueError("Input column must have at least one value")
     if column.isna().sum():
-        raise Exception(f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
+        raise Exception(
+            f'column must not have missing values.\ncolumn have {column.isna().sum()} missing values')
     if column.unique().size != 2:
-        raise Exception(f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
+        raise Exception(
+            f'column must have exactly two unique values.\ncolumn have {column.unique().size} unique values')
 
     value_counts = column.value_counts()
     count1 = value_counts.values[0]
@@ -5006,24 +5441,28 @@ def confint_proportion_coluns_2sample_statsmodels(column: pd.Series, alpha: floa
     nobs1 = nobs2 = column.size
     # Additional checks
     if nobs1 < 2 or nobs2 < 2:
-        raise ValueError("Each sample (nobs1 and nobs2) must have at least two observations")
+        raise ValueError(
+            "Each sample (nobs1 and nobs2) must have at least two observations")
     if count1 > nobs1 or count2 > nobs2:
         raise ValueError("Count cannot be greater than sample size")
     elif nobs1 < 30 or nobs2 < 30:
-        print(colored("Warning: Sample size is less than 30. Results may be unreliable.", 'red'))       
-    
-    lower, upper = stm.confint_proportions_2indep(count1=count1, nobs1=nobs1, count2=count2, nobs2=nobs2, alpha=alpha)
+        print(colored(
+            "Warning: Sample size is less than 30. Results may be unreliable.", 'red'))
+
+    lower, upper = stm.confint_proportions_2indep(
+        count1=count1, nobs1=nobs1, count2=count2, nobs2=nobs2, alpha=alpha)
     return lower, upper
 
-def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series, 
-                         stat_func: callable = np.mean, 
-                         bootstrap_conf_level: float = 0.95, 
-                         num_boot: int = 1000,
-                         alpha: float = 0.05,
-                         p_value_method: str = 'normal_approx',
-                         plot: bool = True,
-                         return_boot_data: bool = False,
-                         return_results: bool = False) -> tuple:
+
+def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
+                           stat_func: callable = np.mean,
+                           bootstrap_conf_level: float = 0.95,
+                           num_boot: int = 1000,
+                           alpha: float = 0.05,
+                           p_value_method: str = 'normal_approx',
+                           plot: bool = True,
+                           return_boot_data: bool = False,
+                           return_results: bool = False) -> tuple:
     """
     Perform bootstrap resampling to estimate the difference of a statistic between two samples.
 
@@ -5053,26 +5492,34 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
             return f"{x/1e3:.1f}k"
         else:
             return f"{x:.1f}"
-    def  plot_data(boot_data):
+
+    def plot_data(boot_data):
         # Create bins and histogram values using NumPy
 
         bins = np.linspace(boot_data.min(), boot_data.max(), 30)
         hist, bin_edges = np.histogram(boot_data, bins=bins)
-        text = [f'{human_readable_number(bin_edges[i])} - {human_readable_number(bin_edges[i+1])}' for i in range(len(bin_edges)-1)]
-        bins = [0.5 * (bin_edges[i] + bin_edges[i+1]) for i in range(len(bin_edges)-1)]
+        text = [
+            f'{human_readable_number(bin_edges[i])} - {human_readable_number(bin_edges[i+1])}' for i in range(len(bin_edges)-1)]
+        bins = [0.5 * (bin_edges[i] + bin_edges[i+1])
+                for i in range(len(bin_edges)-1)]
 
         # Create a Plotly figure with the histogram values and bin edges
-        fig = px.bar(x=bins, y=hist, title="Bootstrap Distribution of Difference")
+        fig = px.bar(x=bins, y=hist,
+                     title="Bootstrap Distribution of Difference")
 
         # Color the bars outside the CI orange
         ci_lower, ci_upper = ci
-        colors = ["#049CB3" if x < ci_lower or x > ci_upper else 'rgba(128, 60, 170, 0.9)' for x in bins]
+        colors = ["#049CB3" if x < ci_lower or x >
+                  ci_upper else 'rgba(128, 60, 170, 0.9)' for x in bins]
         fig.data[0].marker.color = colors
         fig.data[0].text = text
-        fig.add_vline(x=ci_lower, line_width=2, line_color="#049CB3", annotation_text=f"CI Lower: {ci_lower:.2f}")
-        fig.add_vline(x=ci_upper, line_width=2, line_color="#049CB3", annotation_text=f"CI Upper: {ci_upper:.2f}")
+        fig.add_vline(x=ci_lower, line_width=2, line_color="#049CB3",
+                      annotation_text=f"CI Lower: {ci_lower:.2f}")
+        fig.add_vline(x=ci_upper, line_width=2, line_color="#049CB3",
+                      annotation_text=f"CI Upper: {ci_upper:.2f}")
         fig.update_annotations(font_size=16)
-        fig.update_traces(hovertemplate='count=%{y}<br>x=%{text}', textposition='none')
+        fig.update_traces(
+            hovertemplate='count=%{y}<br>x=%{text}', textposition='none')
         # Remove gap between bars and show white line
         fig.update_layout(
             width=800,
@@ -5096,7 +5543,7 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
         )
         # Show the plot
         return fig
-            
+
     # Check input types and lengths
     if not isinstance(sample1, pd.Series) or not isinstance(sample2, pd.Series):
         raise ValueError("Input samples must be pd.Series")
@@ -5107,7 +5554,8 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
         elif len(sample) < 30:
             warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     # Bootstrap Sampling
     boot_data = np.empty(num_boot)
     max_len = max(len(sample1), len(sample2))
@@ -5119,7 +5567,8 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
     # Confidence Interval Calculation
     lower_bound = (1 - bootstrap_conf_level) / 2
     upper_bound = 1 - lower_bound
-    ci = tuple(np.percentile(boot_data, [100 * lower_bound, 100 * upper_bound]))
+    ci = tuple(np.percentile(
+        boot_data, [100 * lower_bound, 100 * upper_bound]))
 
     # P-value Calculation
     if p_value_method == 'normal_approx':
@@ -5129,9 +5578,11 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
         )
     elif p_value_method == 'kde':
         kde = stats.gaussian_kde(boot_data)
-        p_value = 2 * min(kde.integrate_box_1d(-np.inf, 0), kde.integrate_box_1d(0, np.inf))
+        p_value = 2 * min(kde.integrate_box_1d(-np.inf, 0),
+                          kde.integrate_box_1d(0, np.inf))
     else:
-        raise ValueError("Invalid p_value_method. Must be 'normal_approx' or 'kde'")
+        raise ValueError(
+            "Invalid p_value_method. Must be 'normal_approx' or 'kde'")
 
     if not return_results:
         print('Bootstrap resampling to estimate the difference')
@@ -5139,9 +5590,11 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
         print('p-value = ', p_value)
         print('ci = ', ci)
         if p_value < alpha:
-            print(colored("Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
+            print(colored(
+                "Отклоняем нулевую гипотезу, поскольку p-value меньше уровня значимости", 'red'))
         else:
-            print(colored("Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
+            print(colored(
+                "Нет оснований отвергнуть нулевую гипотезу, поскольку p-value больше или равно уровню значимости", 'green'))
         plot_data(boot_data).show()
     else:
         res = []
@@ -5153,14 +5606,15 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
             res.append(plot_data(boot_data))
 
         return tuple(res)
-    
+
+
 def bootstrap_single_sample(sample: pd.Series,
-                         stat_func: callable = np.mean, 
-                         bootstrap_conf_level: float = 0.95, 
-                         num_boot: int = 1000,
-                         plot: bool = True,
-                         return_boot_data: bool = False,
-                         return_results: bool = False) -> tuple:
+                            stat_func: callable = np.mean,
+                            bootstrap_conf_level: float = 0.95,
+                            num_boot: int = 1000,
+                            plot: bool = True,
+                            return_boot_data: bool = False,
+                            return_results: bool = False) -> tuple:
     """
     Perform bootstrap resampling to estimate the variability of a statistic for a single sample.
 
@@ -5188,26 +5642,33 @@ def bootstrap_single_sample(sample: pd.Series,
             return f"{x/1e3:.1f}k"
         else:
             return f"{x:.1f}"
-    def  plot_data(boot_data):
+
+    def plot_data(boot_data):
         # Create bins and histogram values using NumPy
 
         bins = np.linspace(boot_data.min(), boot_data.max(), 30)
         hist, bin_edges = np.histogram(boot_data, bins=bins)
-        text = [f'{human_readable_number(bin_edges[i])} - {human_readable_number(bin_edges[i+1])}' for i in range(len(bin_edges)-1)]
-        bins = [0.5 * (bin_edges[i] + bin_edges[i+1]) for i in range(len(bin_edges)-1)]
+        text = [
+            f'{human_readable_number(bin_edges[i])} - {human_readable_number(bin_edges[i+1])}' for i in range(len(bin_edges)-1)]
+        bins = [0.5 * (bin_edges[i] + bin_edges[i+1])
+                for i in range(len(bin_edges)-1)]
 
         # Create a Plotly figure with the histogram values and bin edges
         fig = px.bar(x=bins, y=hist, title="Bootstrap Distribution")
 
         # Color the bars outside the CI orange
         ci_lower, ci_upper = ci
-        colors = ["#049CB3" if x < ci_lower or x > ci_upper else 'rgba(128, 60, 170, 0.9)' for x in bins]
+        colors = ["#049CB3" if x < ci_lower or x >
+                  ci_upper else 'rgba(128, 60, 170, 0.9)' for x in bins]
         fig.data[0].marker.color = colors
         fig.data[0].text = text
-        fig.add_vline(x=ci_lower, line_width=2, line_color="#049CB3", annotation_text=f"CI Lower: {ci_lower:.2f}")
-        fig.add_vline(x=ci_upper, line_width=2, line_color="#049CB3", annotation_text=f"CI Upper: {ci_upper:.2f}")
+        fig.add_vline(x=ci_lower, line_width=2, line_color="#049CB3",
+                      annotation_text=f"CI Lower: {ci_lower:.2f}")
+        fig.add_vline(x=ci_upper, line_width=2, line_color="#049CB3",
+                      annotation_text=f"CI Upper: {ci_upper:.2f}")
         fig.update_annotations(font_size=16)
-        fig.update_traces(hovertemplate='count=%{y}<br>x=%{text}', textposition='none')
+        fig.update_traces(
+            hovertemplate='count=%{y}<br>x=%{text}', textposition='none')
         # Remove gap between bars and show white line
         fig.update_layout(
             width=800,
@@ -5231,7 +5692,7 @@ def bootstrap_single_sample(sample: pd.Series,
         )
         # Show the plot
         return fig
-            
+
     # Check input types and lengths
     if not isinstance(sample, pd.Series):
         raise ValueError("Input sample must be pd.Series")
@@ -5241,7 +5702,8 @@ def bootstrap_single_sample(sample: pd.Series,
     elif len(sample) < 30:
         warning_issued = True
     if warning_issued:
-        print(colored("Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))   
+        print(colored(
+            "Warning: Sample size is less than 30 for one or more samples. Results may be unreliable.", 'red'))
     # Bootstrap Sampling
     boot_data = np.empty(num_boot)
     max_len = len(sample)
@@ -5252,7 +5714,8 @@ def bootstrap_single_sample(sample: pd.Series,
     # Confidence Interval Calculation
     lower_bound = (1 - bootstrap_conf_level) / 2
     upper_bound = 1 - lower_bound
-    ci = tuple(np.percentile(boot_data, [100 * lower_bound, 100 * upper_bound]))
+    ci = tuple(np.percentile(
+        boot_data, [100 * lower_bound, 100 * upper_bound]))
 
     if not return_results:
         print('Bootstrap resampling')
@@ -5268,5 +5731,57 @@ def bootstrap_single_sample(sample: pd.Series,
             res.append(plot_data(boot_data))
 
         return tuple(res)
-    
-           
+
+
+def check_negative_value_in_df(df):
+    '''
+    Функция проверяет на негативные значения числовые столбцы датафрейма и выводит количество отрицательных значений
+    '''
+    size = df.shape[0]
+    num_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    df_num_columns = df[num_columns]
+    negative = (df_num_columns < 0).sum()
+    display(negative[negative != 0].apply(
+        lambda x: f'{x} ({(x / size):.1%})').to_frame(name='negative'))
+
+
+def check_zeros_value_in_df(df):
+    '''
+    Функция проверяет на нулевые значения числовые столбцы датафрейма и выводит количество нулевых значений
+    '''
+    size = df.shape[0]
+    num_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    df_num_columns = df[num_columns]
+    zeros = (df_num_columns < 0).sum()
+    display(zeros[zeros != 0].apply(
+        lambda x: f'{x} ({(x / size):.1%})').to_frame(name='zeros'))
+
+
+def check_missed_value_in_df(df):
+    '''
+    Функция проверяет на пропуски датафрейме и выводит количество пропущенных значений
+    '''
+    size = df.shape[0]
+    missed = df.isna().sum()
+    display(missed[missed != 0].apply(
+        lambda x: f'{x} ({(x / size):.1%})').to_frame(name='missed'))
+
+
+def normalize_string_series(column: pd.Series) -> pd.Series:
+    """
+    Normalize a pandas Series of strings by removing excess whitespace, trimming leading and trailing whitespace,
+    and converting all words to lowercase.
+
+    Args:
+        column (pd.Series): The input Series of strings to normalize
+
+    Returns:
+        pd.Series: The normalized Series of strings
+    """
+    if not isinstance(column, pd.Series):
+        raise ValueError("Input must be a pandas Series")
+    if not isinstance(column.dropna().iloc[0], str):
+        raise ValueError("Series must contain strings")
+    return column.str.lower().str.strip().str.replace(r'\s+', ' ', regex=True)
