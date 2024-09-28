@@ -969,7 +969,7 @@ def find_columns_with_duplicates(df) -> pd.Series:
     return dfs_duplicated
 
 
-def check_duplicated_combinations_gen(df, n=np.inf):
+def check_duplicated_combinations_gen(df, n=2):
     '''
     Функция считает дубликаты между всеми возможными комбинациями между столбцами.
     Сначала для проверки на дубли берутся пары столбцов.  
@@ -990,9 +990,9 @@ def check_duplicated_combinations_gen(df, n=np.inf):
     display(dupl_df_c2.fillna('').style.set_caption('Duplicates').set_table_styles([{'selector': 'caption',
                                                                                      'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]
                                                                                      }]))
-    if n < 3:
-        return
     yield
+    if n < 3:
+        return    
     c3 = itertools.combinations(df.columns, 3)
     dupl_c3_list = []
     print(f'Group by 3 columns')
@@ -1842,13 +1842,15 @@ def lemmatize_column(column):
     return column.map(lemmatize_text)
 
 
-def categorize_column_by_lemmatize(column, categorization_dict):
+def categorize_column_by_lemmatize(column: pd.Series, categorization_dict: dict, use_cache: bool = False):
     """
     Категоризация столбца с помощью лемматизации.
 
     Parameters:
     column (pd.Series): Столбец для категоризации.
     categorization_dict (dict): Словарь для категоризации, где ключи - категории, а значения - списки лемм.
+    use_cache (bool): Если истина, то  результат будет сохранен в кэше. Нужно учитывать, что если данных будет много,  
+    то память может переполниться. default (False)
 
     Returns:
     pd.Series: Категоризированный столбец.
@@ -1875,10 +1877,19 @@ def categorize_column_by_lemmatize(column, categorization_dict):
         return pd.Series([])
 
     m = Mystem()
+    buffer = dict()
 
     def lemmatize_text(text):
         try:
-            return m.lemmatize(text)
+            if use_cache:
+                if text in buffer:
+                    return buffer[text]
+                else:
+                    lemas = m.lemmatize(text)
+                    buffer[text] = lemas
+                    return lemas
+            else:
+                return m.lemmatize(text)
         except Exception as e:
             print(f"Ошибка при лемматизации текста: {e}")
             return []
@@ -2096,6 +2107,7 @@ def plot_feature_importances_classifier(df: pd.DataFrame, target: str):
         col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
     df_tmp = df[num_columns + [target]].dropna()
     df_features = df_tmp[num_columns]
+    target_str = target
     target = df_tmp[target]
     # Get the feature names
     features = df_features.columns
@@ -2118,7 +2130,7 @@ def plot_feature_importances_classifier(df: pd.DataFrame, target: str):
 
     # Create the bar chart
     fig = px.bar(feature_importances, x='Importance', y='Feature',
-                 title=f'Feature Importances for {target}')
+                 title=f'Feature Importances for {target_str}')
     fig.update_layout(
         yaxis=dict(categoryorder='total ascending'),
         width=700,  # Set the width of the graph
@@ -2845,7 +2857,7 @@ def graph_analysis(df, cat_coluns, num_column):
         'cat_columns': cat_coluns,
         'cat_column_x': cat_coluns[0],
         'cat_column_color': cat_coluns[1],
-        'func': 'sum'
+        'func': 'mean'
     }
     colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
                         '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
@@ -3343,7 +3355,7 @@ def graph_analysis(df, cat_coluns, num_column):
         buttons.append(dict(label='sankey', method='update', args=[{'visible': [
                        False, False, True]}, {'xaxis': {'visible': False}, 'yaxis': {'visible': False}}]))
     #    add range, distinct count
-        for i, func in enumerate(['sum', 'count', 'nunique']):
+        for i, func in enumerate(['sum', 'mean', 'count', 'nunique']):
             config['func'] = func
 
             # heatmap
@@ -3478,6 +3490,17 @@ def graph_analysis(df, cat_coluns, num_column):
                       )
     fig.show()
 
+def graph_analysis_gen(df):
+    category_columns = [
+        col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+    num_columns = [
+        col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    c2 = itertools.combinations(category_columns, 2)
+    for cat_pair in c2:
+        for num_column in num_columns:
+            print(list(cat_pair) + num_column)
+            graph_analysis(df, list(cat_pair), num_column)
+            yield
 
 def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series, equal_var=False) -> float:
     """
@@ -5732,6 +5755,22 @@ def bootstrap_single_sample(sample: pd.Series,
 
         return tuple(res)
 
+def check_duplicated_value_in_df(df):
+    '''
+    Функция проверяет на дубли столбцы датафрейма и выводит количество дублей в каждом столбце
+    '''
+    cnt_duplicated = pd.Series(dtype=int)
+    size = df.shape[0]
+    for col in df.columns:
+        is_duplicated = df[col].duplicated()
+        if is_duplicated.any():
+            cnt_duplicated[col] = df[is_duplicated].shape[0]
+    display(cnt_duplicated.apply(lambda x: f'{x} ({(x / size):.2%})').to_frame().style
+            .set_caption('Duplicates')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+            .hide_columns())
+
 
 def check_negative_value_in_df(df):
     '''
@@ -5785,3 +5824,184 @@ def normalize_string_series(column: pd.Series) -> pd.Series:
     if not isinstance(column.dropna().iloc[0], str):
         raise ValueError("Series must contain strings")
     return column.str.lower().str.strip().str.replace(r'\s+', ' ', regex=True)
+
+def analys_column_by_category(df: pd.DataFrame, df_for_analys: pd.DataFrame, column_for_analys: str) -> None:
+    """
+    Show statisctic column by categories in DataFrame
+
+    Parameters:
+    df (pd.DataFrame): origin DataFrame
+    df_for_analys (pd.DataFrame): DataFrame for analysis
+
+    Returns:
+    None
+    """
+    size_all = df.shape[0]
+    category_columns = [
+        col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+    for category_column in category_columns:
+        analys_df = df_for_analys.groupby(
+                    category_column).size().reset_index(name='count')
+        summ_counts = analys_df['count'].sum()
+        all_df = df.groupby(
+                    category_column).size().reset_index(name='total')
+        result_df = pd.merge(analys_df, all_df, on=category_column)
+        result_df['count_in_total_pct'] = (
+            result_df['count'] / result_df['total'])
+        result_df['count_in_sum_count_pct'] = (
+            result_df['count'] / summ_counts)
+        result_df['total_in_sum_total_pct'] = (
+            result_df['total'] / size_all)
+        result_df['diff_sum_pct'] = result_df['count_in_sum_count_pct'] - result_df['total_in_sum_total_pct']
+        display(result_df[[category_column, 'total', 'count', 'count_in_total_pct', 'count_in_sum_count_pct', 'total_in_sum_total_pct', 'diff_sum_pct']].style
+                .set_caption(f'Value in "{column_for_analys}" by category "{category_column}"')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                .format('{:.1%}', subset=['count_in_total_pct', 'count_in_sum_count_pct', 'total_in_sum_total_pct', 'diff_sum_pct'])
+                .hide_index())
+        yield
+
+def analys_by_category_gen(df, series_for_analys):
+    '''
+    Генератор.
+    Для каждой колонки в series_for_analys функция выводит выборку датафрейма.  
+    И затем выводит информацию по каждой категории в таблице.
+    '''
+    for col in series_for_analys.index:
+        if not series_for_analys[col][col].value_counts().empty:
+            print(f'Value counts outliers')
+            display(series_for_analys[col][col].value_counts().to_frame('outliers').head(10).style.set_caption(f'{col}')
+                    .set_table_styles([{'selector': 'caption',
+                                        'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]
+                                        }]))
+            yield
+        display(series_for_analys[col].sample(10).style.set_caption(f'Sample outliers in {col}').set_table_styles([{'selector': 'caption',
+                                                                                                                  'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}]))
+        yield
+        gen = analys_column_by_category(
+            df, series_for_analys[col], col)
+        for _ in gen:
+            yield
+            
+def check_group_count(df, category_columns, value_column):
+    '''
+    Функция выводит информацию о количестве элементов в группах.  
+    Это функция нужна для  проверки того, что количество элементов в группах соответствует ожидаемому  
+    для заполнения пропусков через группы.
+    '''
+    temp = df.groupby(category_columns)[value_column].agg(
+                lambda x: 1 if x.isna().sum() else -1).dropna()
+    # -1 это группы без пропусков
+    group_with_miss = (temp != -1).sum() / temp.size    
+    print(f'{group_with_miss:.2%} groups have missing values')
+    # Посмотрим какой процент групп с пропусками имеют больше 30 элементов
+    temp = df.groupby(category_columns)[value_column].agg(
+            lambda x: x.count() > 30 if x.isna().sum() else -1).dropna()
+    temp = temp[temp != -1]
+    group_with_more_30_elements = (temp == True).sum() / temp.size
+    print(f'{group_with_more_30_elements:.2%}  groups with missings have more than 30 elements')
+    # Посмотрим какой процент групп с пропусками имеют больше 10 элементов
+    temp = df.groupby(category_columns)[value_column].agg(
+            lambda x: x.count() > 10 if x.isna().sum() else -1).dropna()
+    temp = temp[temp != -1]
+    group_with_more_10_elements = (temp == True).sum() / temp.size
+    print(f'{group_with_more_10_elements:.2%}  groups with missings have more than 10 elements')
+    # Посмотрим какой процент групп с пропусками имеют больше 5 элементов
+    temp = df.groupby(category_columns)[value_column].agg(
+            lambda x: x.count() > 5 if x.isna().sum() else -1).dropna()
+    temp = temp[temp != -1]
+    group_with_more_5_elements = (temp == True).sum() / temp.size
+    print(f'{group_with_more_5_elements:.2%}  groups with missings have more than 5 elements')        
+    # Посмотрим какой процент групп содержат только NA
+    temp = df.groupby(category_columns)[value_column].agg(
+            lambda x: x.count() if x.isna().sum() else -1).dropna()
+    temp = temp[temp != -1]
+    group_with_ontly_missings = (temp == 0).sum() / temp.size
+    print(f'{group_with_ontly_missings:.2%}  groups have only missings')   
+    # Посмотрим сколько всего значений в группах, где только прпоуски
+    temp = df.groupby(category_columns)[value_column].agg(
+            lambda x: -1 if x.count() else x.isna().sum() ).dropna()
+    temp = temp[temp != -1]
+    missing_cnt = temp.sum()     
+    print(f'{missing_cnt:.0f} missings in groups with only missings')  
+                
+def fill_na_with_function_by_categories(df, category_columns, value_column, func='median', minimal_group_size = 10):
+    """
+    Fills missing values in the value_column with the result of the func function, 
+    grouping by the category_columns.
+
+    Parameters:
+    - df (pandas.DataFrame): DataFrame to fill missing values
+    - category_columns (list): list of column names to group by
+    - value_column (str): name of the column to fill missing values
+    - func (callable or str): function to use for filling missing values 
+    (can be a string, e.g. "mean", or a callable function that returns a single number)
+    - minimal_group_size (int): Minimal group size for fills missings.
+    Returns:
+    - pd.Series: Modified column with filled missing values
+    """
+    if not all(col in df.columns for col in category_columns):
+        raise ValueError("Invalid category column(s). Column must be in df")
+    if value_column not in df.columns:
+        raise ValueError("Invalid value column. Column must be in df")
+
+    available_funcs = {'median', 'mean', 'max', 'min'}
+
+    if isinstance(func, str):
+        if func not in available_funcs:
+            raise ValueError(f"Unknown function: {func}")
+        # If func is a string, use the corresponding pandas method
+        return df.groupby(category_columns)[value_column].transform(
+            lambda x: x.fillna(x.apply(func)) if x.count() >= minimal_group_size else x)
+    else:
+        # If func is a callable, apply it to each group of values
+        return df.groupby(category_columns)[value_column].transform(
+            lambda x: x.fillna(func(x)) if x.count() >= minimal_group_size else x)
+        
+def quantiles_columns(column, quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]):
+    max_ = pretty_value(column.max())
+    column_summary = pd.DataFrame({'Max': [max_]})
+    for quantile in quantiles:
+        column_summary[f'{quantile * 100:.0f}'] = pretty_value(column.quantile(quantile))
+    min_ = pretty_value(column.min())    
+    column_summary['Min'] = min_
+    display(column_summary.T.reset_index().style
+            .set_caption(f'Quantiles')
+            .set_table_styles([{'selector': 'caption',
+                                'props': [('font-size', '15px')]
+                                }])
+            .set_properties(**{'text-align': 'left'})
+            .hide_columns()
+            .hide_index()
+            )                      
+    
+def top_n_values_gen(df: pd.DataFrame, value_column: str, n: int = 10, threshold: int = 20, func = 'sum'):
+    """
+    Возвращает топ n значений в категориальных столбцах df, где значений больше 20, по значению в столбце value_column.
+
+    Parameters:
+    df (pd.DataFrame): Датасет.
+    column (str): Название столбца, который нужно проанализировать.
+    n (int): Количество топ значений, которые нужно вернуть.
+    value_column (str): Название столбца, по которому нужно рассчитать топ значения.
+    threshold (int, optional): Количество уникальных значений, при котором нужно рассчитать топ значения. Defaults to 20.
+    func (calable): Функция для аггрегации в столбце value_column
+
+    Returns:
+    pd.DataFrame: Топ n значений в столбце column по значению в столбце value_column.
+    """
+    # Проверяем, есть ли в столбце больше 20 уникальных значений
+    categroy_columns = [
+        col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
+    for column in categroy_columns:
+        if df[column].nunique() > threshold:
+            # Группируем данные по столбцу column и рассчитываем сумму по столбцу value_column
+            display(df.groupby(column)[value_column].agg(func).sort_values(ascending=False).head(n).to_frame().reset_index().style
+                .set_caption(f'Top in "{column}"')
+                .set_table_styles([{'selector': 'caption',
+                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                .format('{:.2f}', subset=value_column)
+                .hide_index())
+            yield
+            
+                
