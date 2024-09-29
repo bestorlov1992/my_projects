@@ -2272,8 +2272,7 @@ def categorical_heatmap_matrix_gen(df):
         fig = heatmap(
             heatmap_matrix, title=f'Матрица тепловой карты для {col1} и {col2}')
         plotly_default_settings(fig)
-        fig.show()
-        yield
+        yield fig
 
 
 def treemap_dash(df, columns):
@@ -2893,7 +2892,7 @@ def graph_analysis(df, cat_coluns, num_column):
         # print(config)
         # print(cat_columns)
         # print(num_column)
-        func = config.get('func', 'sum')  # default to 'sum' if not provided
+        func = config.get('func', 'mean')  # default to 'sum' if not provided
         if func == 'mode':
             def func(x): return x.mode().iloc[0]
             def func_for_modes(x): return tuple(x.mode().to_list())
@@ -3498,9 +3497,9 @@ def graph_analysis_gen(df):
     c2 = itertools.combinations(category_columns, 2)
     for cat_pair in c2:
         for num_column in num_columns:
-            print(list(cat_pair) + num_column)
+            # print(list(cat_pair) + num_column)
             graph_analysis(df, list(cat_pair), num_column)
-            yield
+            yield [num_column] + list(cat_pair)
 
 def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series, equal_var=False) -> float:
     """
@@ -6004,4 +6003,239 @@ def top_n_values_gen(df: pd.DataFrame, value_column: str, n: int = 10, threshold
                 .hide_index())
             yield
             
-                
+def bar(config: dict, titles_for_axis: dict = None):
+    """
+    Creates a bar chart using the Plotly Express library.
+
+    Parameters:
+    config (dict): A dictionary containing parameters for creating the chart.
+        - df (DataFrame): A DataFrame containing data for creating the chart.
+        - x (str): The name of the column in the DataFrame to be used for creating the X-axis.
+        - x_axis_label (str): The label for the X-axis.
+        - y (str): The name of the column in the DataFrame to be used for creating the Y-axis.
+        - y_axis_label (str): The label for the Y-axis.
+        - category (str): The name of the column in the DataFrame to be used for creating categories.  
+        If None or an empty string, the chart will be created without category.
+        - category_axis_label (str): The label for the categories.
+        - title (str): The title of the chart.
+        - func (str): The function to be used for aggregating data (default is 'mean').
+        - barmode (str): The mode for displaying bars (default is 'group').
+        - width (int): The width of the chart (default is None).
+        - height (int): The height of the chart (default is None).
+    titles_for_axis (dict):  A dictionary containing titles for the axes.
+    
+    Returns:
+    fig (plotly.graph_objs.Figure): The created chart.
+
+    Example:
+    titles_for_axis = dict(
+        # numeric column (0 - средний род, 1 - мужской род, 2 - женский род) (Середнее образовние, средний доход, средняя температура) )
+        children = ['Количество детей', 'количество детей', 0]
+        , age = ['Возраст, лет', 'возраст', 1]
+        , total_income = ['Ежемесячный доход', 'ежемесячный доход', 1]    
+        # category column
+        , education = ['Уровень образования', 'уровня образования']
+        , family_status = ['Семейное положение', 'семейного положения']
+        , gender = ['Пол', 'пола']
+        , income_type = ['Тип занятости', 'типа занятости']
+        , debt = ['Задолженность (1 - имеется, 0 - нет)', 'задолженности']
+        , purpose = ['Цель получения кредита', 'цели получения кредита']
+        , dob_cat = ['Возрастная категория, лет', 'возрастной категории']
+        , total_income_cat = ['Категория дохода', 'категории дохода']
+    )
+    config = dict(
+        df = df
+        , x = 'education'  
+        , x_axis_label = 'Образование'
+        , y = 'total_income'
+        , y_axis_label = 'Доход'
+        , category = 'gender'
+        , category_axis_label = 'Пол'
+        , title = 'Доход в зависимости от пола и уровня образования'
+        , func = 'mean'
+        , barmode = 'group'
+        , width = None
+        , height = None
+    )
+    bar(config)
+    """    
+    # Проверка входных данных
+    if not isinstance(config, dict):
+        raise TypeError("config must be a dictionary")
+    if 'df' not in config or not isinstance(config['df'], pd.DataFrame):
+        raise ValueError("df must be a pandas DataFrame")
+    if 'x' not in config or not isinstance(config['x'], str):
+        raise ValueError("x must be a string")
+    if 'y' not in config or not isinstance(config['y'], str):
+        raise ValueError("y must be a string")
+    if 'category' not in config:
+        config['category'] = None
+        config['category_axis_label'] = None
+    elif not isinstance(config['category'], str) and config['category'] is not None:
+        raise ValueError("category must be a string")
+    if 'func' in config and not isinstance(config['func'], str):
+        raise ValueError("func must be a string")
+    if 'barmode' in config and not isinstance(config['barmode'], str):
+        raise ValueError("barmode must be a string")
+    if 'func' not in config:
+        config['func'] = 'mean'
+    if 'barmode' not in config:
+        config['barmode'] = 'group'        
+    if 'width' not in config:
+        config['width'] = None  
+    if 'height' not in config:
+        config['height'] = None    
+    if titles_for_axis:
+        if config['func'] not in ['mean', 'median', 'sum']:
+            raise ValueError("func must be in ['mean', 'median', 'sum']")
+        func_for_title = {'mean': ['Среднее', 'Средний', 'Средняя']
+                          , 'median': ['Медианное', 'Медианный', 'Медианная']
+                          , 'sum': ['Суммарное', 'Суммарный', 'Суммарная']}
+        config['x_axis_label'] = titles_for_axis[config['x']][0]
+        config['y_axis_label'] = titles_for_axis[config['y']][0]
+        config['category_axis_label'] = titles_for_axis[config['category']][0] if 'category' in config else None
+        func = config['func']
+        if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
+            numeric = titles_for_axis[config["y"]][1]
+            cat = titles_for_axis[config["x"]][1]
+            suffix_type = titles_for_axis[config["y"]][2]
+        else:
+            numeric = titles_for_axis[config["x"]][1]
+            cat = titles_for_axis[config["y"]][1]   
+            suffix_type = titles_for_axis[config["x"]][2]    
+        title = f'{func_for_title[func][suffix_type]}'
+        title += f' {numeric} в зависимости от {cat}'                
+        if 'category' in config and config['category']:
+            title += f' и {titles_for_axis[config["category"]][1]}'  
+        config['title'] = title
+    else:
+        if 'x_axis_label' not in config:
+            config['x_axis_label'] = None  
+        if 'y_axis_label' not in config:
+            config['y_axis_label'] = None          
+        if 'category_axis_label' not in config:
+            config['category_axis_label'] = None  
+        if 'title' not in config:
+            config['title'] = None          
+         
+    def prepare_df(config: dict):
+        df = config['df']
+        color = [config['category']] if config['category'] else []
+        if not(pd.api.types.is_numeric_dtype(df[config['x']]) or pd.api.types.is_numeric_dtype(df[config['y']])):
+            raise ValueError("At least one of x or y must be numeric.")
+        elif pd.api.types.is_numeric_dtype(df[config['y']]):
+            cat_columns = [config['x']] + color
+            num_column = config['y']
+        else:
+            cat_columns = [config['y']] + color
+            num_column = config['x']        
+        func = config.get('func', 'mean')  # default to 'mean' if not provided
+        func_df = (df[[*cat_columns, num_column]]
+                .groupby(cat_columns)
+                .agg(num=(num_column, func))
+                .sort_values('num', ascending=False)
+                .rename(columns={'num': num_column})
+                .reset_index()
+                )
+        return func_df
+    df_for_fig = prepare_df(config)
+    x = df_for_fig[config['x']].values
+    y = df_for_fig[config['y']].values
+    x_axis_label = config['x_axis_label']
+    y_axis_label = config['y_axis_label']
+    color_axis_label = config['category_axis_label']
+    color = df_for_fig[config['category']].values if config['category'] else None
+    fig = px.bar(x=x, y=y, color=color, barmode=config['barmode'])
+    if x_axis_label:
+        hovertemplate_x = f'{x_axis_label} = '
+    else:
+        hovertemplate_x = f'x = '
+    if x_axis_label:
+        hovertemplate_y = f'{y_axis_label} = '
+    else:
+        hovertemplate_y = f'y = '    
+    if x_axis_label:
+        hovertemplate_color = f'{color_axis_label} = '
+    else:
+        hovertemplate_color = f'color = '           
+    hovertemplate = hovertemplate_x + '%{x}<br>' + hovertemplate_y + '%{y}<br>'
+    if config['category']:
+        hovertemplate += hovertemplate_color + '%{data.name}'
+    fig.update_traces(hovertemplate=hovertemplate)                            
+    fig.update_layout(
+        width = config['width']
+        , height = config['height']
+        , title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)")
+        , title={'text': config["title"]}
+        # , title={'text': f'<b>{title}</b>'}
+        , xaxis_title=x_axis_label
+        , yaxis_title=y_axis_label
+        , legend_title_text=color_axis_label
+        , font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)")
+        , xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
+        , yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
+        , xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
+        , yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
+        , legend_title_font_color= 'rgba(0, 0, 0, 0.5)'
+        , legend_font_color = 'rgba(0, 0, 0, 0.5)'
+        , xaxis_linecolor="rgba(0, 0, 0, 0.5)"
+        , yaxis_linecolor="rgba(0, 0, 0, 0.5)"
+        # , margin=dict(l=50, r=50, b=50, t=70)
+        , hoverlabel=dict(bgcolor="white")
+    )
+    return fig
+
+def pairplot(df: pd.DataFrame, titles_for_axis: dict = None):
+    """
+    Create a pairplot of a given DataFrame with customized appearance.
+
+    Parameters:
+    df (pd.DataFrame): The input DataFrame containing numerical variables.
+    titles_for_axis (dict):  A dictionary containing titles for the axes.
+    
+    Returns:
+    None
+    
+    Example:
+    titles_for_axis = dict(
+        # numeric column
+        children = 'Кол-во детей'
+        , age = 'Возраст'
+        , total_income = 'Доход'    
+    )
+    """    
+    def human_readable_number(x):
+            if x >= 1e6 or x <= -1e6:
+                return f"{x/1e6:.1f}M"
+            elif x >= 1e3 or x <= -1e3:
+                return f"{x/1e3:.1f}k"
+            else:
+                return f"{x:.1f}"
+    g = sns.pairplot(df, markers=["o"], 
+                            plot_kws={'color': (128/255, 60/255, 170/255, 0.9)},
+                            diag_kws={'color': (128/255, 60/255, 170/255, 0.9)})            
+    for ax in g.axes.flatten():
+        xlabel = ax.get_xlabel()
+        ylabel = ax.get_ylabel()
+        if titles_for_axis:
+            if xlabel:
+                xlabel = titles_for_axis[xlabel]
+            if ylabel:
+                ylabel = titles_for_axis[ylabel]
+        ax.set_xlabel(xlabel, alpha=0.5)
+        ax.set_ylabel(ylabel, alpha=0.5)
+        xticklabels = ax.get_xticklabels()
+        for label in xticklabels:
+            # if label.get_text():
+            #     label.set_text(human_readable_number(int(label.get_text().replace('−', '-'))))  # modify the label text
+            label.set_alpha(0.5) 
+        yticklabels = ax.get_yticklabels()
+        for label in yticklabels:
+            # if label.get_text():
+            #     label.set_text(human_readable_number(int(label.get_text().replace('−', '-'))))  # modify the label text
+            label.set_alpha(0.5)  
+        ax.spines['top'].set_alpha(0.3)
+        ax.spines['left'].set_alpha(0.3)
+        ax.spines['right'].set_alpha(0.3)
+        ax.spines['bottom'].set_alpha(0.3)
+    g.fig.suptitle('Зависимости между числовыми переменными', fontsize=15, x=0.07, y=1.05, fontfamily='open-sans', alpha=0.7, ha='left')                   
