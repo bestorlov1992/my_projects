@@ -29,11 +29,23 @@ import warnings
 colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4', 'rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4']
-colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
-                    '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2']
+colorway_for_bar = ['rgba(128, 60, 170, 0.9)'
+                    , '#049CB3'
+                    , '#5c6bc0'
+                    ,'rgba(194, 143, 113, 0.8)'   
+                    ,'rgba(156, 130, 217, 0.8)'                         
+                   , '#63719C'   
+                   ,'#8B9467'   
+                   ,'rgba(102, 204, 204, 1)'
+                   ,'#03A9F4'
+   ,'rgba(156, 102, 217, 0.8)','#8F7A7A','#84a9e9'
+   , 'rgba(50, 102, 103, 0.8)'  
+]
+# colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+#                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+#                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+#                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
+#                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2']
 colorway_for_treemap = [
     'rgba(148, 100, 170, 1)',
     'rgba(50, 156, 179, 1)',
@@ -91,7 +103,17 @@ def plotly_default_settings(fig):
         yaxis_linecolor="rgba(0, 0, 0, 0.5)",
         # yaxis_linewidth=2
         margin=dict(l=50, r=50, b=50, t=70),
-        hoverlabel=dict(bgcolor="white")
+        hoverlabel=dict(bgcolor="white"),
+        xaxis=dict(
+            showgrid=True
+            , gridwidth=1
+            , gridcolor="rgba(0, 0, 0, 0.1)"
+        ),
+        yaxis=dict(
+            showgrid=True
+            , gridwidth=1
+            , gridcolor="rgba(0, 0, 0, 0.07)"        
+        )
     )
 
 
@@ -1243,40 +1265,6 @@ def get_non_matching_rows(df, col1, col2):
         print('Нет строк для которых значения в col1 имеют разные значения в col2')
     else:
         return non_matching_rows
-
-
-def fill_na_with_function_by_categories(df, category_columns, value_column, func='median'):
-    """
-    Fills missing values in the value_column with the result of the func function, 
-    grouping by the category_columns.
-
-    Parameters:
-    df (pandas.DataFrame): DataFrame to fill missing values
-    category_columns (list): list of column names to group by
-    value_column (str): name of the column to fill missing values
-    func (callable or str): function to use for filling missing values 
-    (can be a string, e.g. "mean", or a callable function that returns a single number)
-
-    Returns:
-    pd.Series: Modified column with filled missing values
-    """
-    if not all(col in df.columns for col in category_columns):
-        raise ValueError("Invalid category column(s). Column must be in df")
-    if value_column not in df.columns:
-        raise ValueError("Invalid value column. Column must be in df")
-
-    available_funcs = {'median', 'mean', 'max', 'min'}
-
-    if isinstance(func, str):
-        if func not in available_funcs:
-            raise ValueError(f"Unknown function: {func}")
-        # If func is a string, use the corresponding pandas method
-        return df.groupby(category_columns)[value_column].transform(
-            lambda x: x.fillna(x.apply(func)))
-    else:
-        # If func is a callable, apply it to each group of values
-        return df.groupby(category_columns)[
-            value_column].transform(lambda x: x.fillna(func(x)))
 
 
 def detect_outliers_Zscore(df: pd.DataFrame, z_level: float = 3.5) -> pd.Series:
@@ -5955,7 +5943,8 @@ def fill_na_with_function_by_categories(df, category_columns, value_column, func
     else:
         # If func is a callable, apply it to each group of values
         return df.groupby(category_columns)[value_column].transform(
-            lambda x: x.fillna(func(x)) if x.count() >= minimal_group_size else x)
+            lambda x: x.fillna(func(x)) if x.count() >= minimal_group_size else x)             
+        
         
 def quantiles_columns(column, quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]):
     max_ = pretty_value(column.max())
@@ -6022,6 +6011,13 @@ def bar(config: dict, titles_for_axis: dict = None):
         - barmode (str): The mode for displaying bars (default is 'group').
         - width (int): The width of the chart (default is None).
         - height (int): The height of the chart (default is None).
+        - text (bool):  Whether to display text on the chart (default is False).
+        - textsize (int): Text size (default 14)
+        - xaxis_show (bool):  Whether to show the X-axis (default is True).
+        - yaxis_show (bool):  Whether to show the Y-axis (default is True).
+        - showgrid_x (bool):   Whether to show grid on X-axis (default is True).
+        - showgrid_y (bool):   Whether to show grid on Y-axis (default is True).
+
     titles_for_axis (dict):  A dictionary containing titles for the axes.
     
     Returns:
@@ -6056,6 +6052,9 @@ def bar(config: dict, titles_for_axis: dict = None):
         , barmode = 'group'
         , width = None
         , height = None
+        , orientation = 'v'
+        , text = False
+        , textsize = 14
     )
     bar(config)
     """    
@@ -6068,11 +6067,6 @@ def bar(config: dict, titles_for_axis: dict = None):
         raise ValueError("x must be a string")
     if 'y' not in config or not isinstance(config['y'], str):
         raise ValueError("y must be a string")
-    if 'category' not in config:
-        config['category'] = None
-        config['category_axis_label'] = None
-    elif not isinstance(config['category'], str) and config['category'] is not None:
-        raise ValueError("category must be a string")
     if 'func' in config and not isinstance(config['func'], str):
         raise ValueError("func must be a string")
     if 'barmode' in config and not isinstance(config['barmode'], str):
@@ -6085,6 +6079,19 @@ def bar(config: dict, titles_for_axis: dict = None):
         config['width'] = None  
     if 'height' not in config:
         config['height'] = None    
+    if 'textsize' not in config:
+            config['textsize'] = 14    
+    if 'xaxis_show' not in config:
+            config['xaxis_show'] = True
+    if 'yaxis_show' not in config:
+            config['yaxis_show'] = True      
+    if 'showgrid_x' not in config:
+            config['showgrid_x'] = True              
+    if 'showgrid_y' not in config:
+            config['showgrid_y'] = True             
+    if pd.api.types.is_numeric_dtype(config['df'][config['y']]) and 'orientation' in config and config['orientation']  == 'h':
+        config['x'], config['y'] = config['y'], config['x']
+                
     if titles_for_axis:
         if config['func'] not in ['mean', 'median', 'sum']:
             raise ValueError("func must be in ['mean', 'median', 'sum']")
@@ -6117,7 +6124,18 @@ def bar(config: dict, titles_for_axis: dict = None):
             config['category_axis_label'] = None  
         if 'title' not in config:
             config['title'] = None          
-         
+    if 'category' not in config:
+        config['category'] = None
+        config['category_axis_label'] = None
+    if not isinstance(config['category'], str) and config['category'] is not None:
+        raise ValueError("category must be a string")        
+    def human_readable_number(x):
+        if x >= 1e6 or x <= -1e6:
+            return f"{x/1e6:.1f} M"
+        elif x >= 1e3 or x <= -1e3:
+            return f"{x/1e3:.1f} k"
+        else:
+            return f"{x:.1f}"
     def prepare_df(config: dict):
         df = config['df']
         color = [config['category']] if config['category'] else []
@@ -6130,13 +6148,28 @@ def bar(config: dict, titles_for_axis: dict = None):
             cat_columns = [config['y']] + color
             num_column = config['x']        
         func = config.get('func', 'mean')  # default to 'mean' if not provided
+        # if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
+        #     ascending=False
+        # else:
+        #     ascending=True
         func_df = (df[[*cat_columns, num_column]]
                 .groupby(cat_columns)
                 .agg(num=(num_column, func))
-                .sort_values('num', ascending=False)
-                .rename(columns={'num': num_column})
-                .reset_index()
-                )
+                .reset_index())
+        if pd.api.types.is_numeric_dtype(config['df'][config['x']]):
+            func_df['temp'] = func_df.groupby(cat_columns[0])['num'].transform('sum')    
+            func_df = (func_df.sort_values(['temp','num'], ascending=True)
+                       .drop('temp', axis=1)  
+                    .rename(columns={'num': num_column})
+                    # .sort_values(columns[0], ascending=ascending)
+                    )
+        else:
+            func_df['temp'] = func_df.groupby(cat_columns[0])['num'].transform('sum')    
+            func_df = (func_df.sort_values(['temp','num'], ascending=False)
+                       .drop('temp', axis=1)  
+                    .rename(columns={'num': num_column})
+                    # .sort_values(columns[0], ascending=ascending)
+                    )
         return func_df
     df_for_fig = prepare_df(config)
     x = df_for_fig[config['x']].values
@@ -6145,7 +6178,17 @@ def bar(config: dict, titles_for_axis: dict = None):
     y_axis_label = config['y_axis_label']
     color_axis_label = config['category_axis_label']
     color = df_for_fig[config['category']].values if config['category'] else None
-    fig = px.bar(x=x, y=y, color=color, barmode=config['barmode'])
+    if 'text' in config and config['text']:
+        if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
+            text = [human_readable_number(el) for el in y]
+        else:
+            text = [human_readable_number(el) for el in x]
+    else:
+        text = None
+    fig = px.bar(x=x, y=y, color=color, barmode=config['barmode'], text=text)
+    color = []
+    for trace in fig.data:
+        color.append(trace.marker.color)
     if x_axis_label:
         hovertemplate_x = f'{x_axis_label} = '
     else:
@@ -6157,11 +6200,22 @@ def bar(config: dict, titles_for_axis: dict = None):
     if x_axis_label:
         hovertemplate_color = f'{color_axis_label} = '
     else:
-        hovertemplate_color = f'color = '           
-    hovertemplate = hovertemplate_x + '%{x}<br>' + hovertemplate_y + '%{y}<br>'
+        hovertemplate_color = f'color = '   
+    if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
+        hovertemplate = hovertemplate_x + '%{x}<br>' + hovertemplate_y + '%{y:.4s}<br>'
+    else:
+        hovertemplate = hovertemplate_x + '%{x:.4s}<br>' + hovertemplate_y + '%{y}<br>'
     if config['category']:
         hovertemplate += hovertemplate_color + '%{data.name}'
-    fig.update_traces(hovertemplate=hovertemplate)                            
+    hovertemplate += '<extra></extra>'
+    fig.update_traces(hovertemplate=hovertemplate
+                    , textfont=dict(
+                        family='Open Sans'
+                        , size=config['textsize']  # Размер шрифта
+                    # color='black'  # Цвет текста
+                    )
+                    , textposition='auto'  # Положение текстовых меток (outside или inside)) 
+                )                           
     fig.update_layout(
         width = config['width']
         , height = config['height']
@@ -6182,7 +6236,28 @@ def bar(config: dict, titles_for_axis: dict = None):
         , yaxis_linecolor="rgba(0, 0, 0, 0.5)"
         # , margin=dict(l=50, r=50, b=50, t=70)
         , hoverlabel=dict(bgcolor="white")
+        , xaxis=dict(
+            visible=config['xaxis_show']
+            , showgrid=config['showgrid_x']
+            , gridwidth=1
+            , gridcolor="rgba(0, 0, 0, 0.1)"
+        )
+        , yaxis=dict(
+            visible=config['yaxis_show']
+            , showgrid=config['showgrid_y']
+            , gridwidth=1
+            , gridcolor="rgba(0, 0, 0, 0.07)"
+        )
     )
+    if pd.api.types.is_numeric_dtype(config['df'][config['x']]):
+        # Чтобы сортировка была по убыванию вернего значения, нужно отсортировать по последнего значению в x
+        traces = list(fig.data)
+        traces.sort(key = lambda x: x.x[-1])
+        fig.data = traces
+        color = color[::-1]
+        for i, trace in enumerate(fig.data):
+            trace.marker.color = color[i]
+        fig.update_layout(legend={'traceorder': 'reversed'})
     return fig
 
 def pairplot(df: pd.DataFrame, titles_for_axis: dict = None):
@@ -6222,18 +6297,18 @@ def pairplot(df: pd.DataFrame, titles_for_axis: dict = None):
                 xlabel = titles_for_axis[xlabel]
             if ylabel:
                 ylabel = titles_for_axis[ylabel]
-        ax.set_xlabel(xlabel, alpha=0.5)
-        ax.set_ylabel(ylabel, alpha=0.5)
+        ax.set_xlabel(xlabel, alpha=0.6)
+        ax.set_ylabel(ylabel, alpha=0.6)
         xticklabels = ax.get_xticklabels()
         for label in xticklabels:
             # if label.get_text():
             #     label.set_text(human_readable_number(int(label.get_text().replace('−', '-'))))  # modify the label text
-            label.set_alpha(0.5) 
+            label.set_alpha(0.6) 
         yticklabels = ax.get_yticklabels()
         for label in yticklabels:
             # if label.get_text():
             #     label.set_text(human_readable_number(int(label.get_text().replace('−', '-'))))  # modify the label text
-            label.set_alpha(0.5)  
+            label.set_alpha(0.6)  
         ax.spines['top'].set_alpha(0.3)
         ax.spines['left'].set_alpha(0.3)
         ax.spines['right'].set_alpha(0.3)
