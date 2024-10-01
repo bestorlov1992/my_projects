@@ -29,17 +29,9 @@ import warnings
 colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4', 'rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4']
-colorway_for_bar = ['rgba(128, 60, 170, 0.9)'
-                    , '#049CB3'
-                    , '#5c6bc0'
-                    ,'rgba(194, 143, 113, 0.8)'   
-                    ,'rgba(156, 130, 217, 0.8)'                         
-                   , '#63719C'   
-                   ,'#8B9467'   
-                   ,'rgba(102, 204, 204, 1)'
-                   ,'#03A9F4'
-   ,'rgba(156, 102, 217, 0.8)','#8F7A7A','#84a9e9'
-   , 'rgba(50, 102, 103, 0.8)'  
+colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', "rgba(112, 155, 219, 0.9)", "rgba(99, 113, 156, 0.9)", '#5c6bc0'
+                    ,'#B690C4', 'rgba(17, 100, 120, 0.9)', 'rgba(194, 143, 113, 0.8)', '#B690C4', '#03A9F4', '#8B9467'       
+                    , '#a771f2', 'rgba(102, 204, 204, 0.9)','rgba(168, 70, 90, 0.9)', 'rgba(50, 152, 103, 0.8)','#8F7A7A','rgba(156, 130, 217, 0.9)'               
 ]
 # colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
 #                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
@@ -5515,7 +5507,7 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
 
         # Create a Plotly figure with the histogram values and bin edges
         fig = px.bar(x=bins, y=hist,
-                     title="Bootstrap Distribution of Difference")
+                     title="Бутстреп-распределение разницы")
 
         # Color the bars outside the CI orange
         ci_lower, ci_upper = ci
@@ -5524,9 +5516,11 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
         fig.data[0].marker.color = colors
         fig.data[0].text = text
         fig.add_vline(x=ci_lower, line_width=2, line_color="#049CB3",
-                      annotation_text=f"CI Lower: {ci_lower:.2f}")
+                      annotation_text=f"{ci_lower:.2f}"
+                      , annotation_position='top', line_dash="dash")
         fig.add_vline(x=ci_upper, line_width=2, line_color="#049CB3",
-                      annotation_text=f"CI Upper: {ci_upper:.2f}")
+                      annotation_text=f"{ci_upper:.2f}"
+                      , annotation_position='top', line_dash="dash")
         fig.update_annotations(font_size=16)
         fig.update_traces(
             hovertemplate='count=%{y}<br>x=%{text}', textposition='none')
@@ -5534,8 +5528,8 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
         fig.update_layout(
             width=800,
             bargap=0,
-            xaxis_title="",
-            yaxis_title="Count",
+            xaxis_title="Разница",
+            yaxis_title="Количество",
             title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)"),
             title={'text': f'<b>{fig.layout.title.text}</b>'},
             # Для подписей и меток
@@ -6148,28 +6142,26 @@ def bar(config: dict, titles_for_axis: dict = None):
             cat_columns = [config['y']] + color
             num_column = config['x']        
         func = config.get('func', 'mean')  # default to 'mean' if not provided
-        # if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
-        #     ascending=False
-        # else:
-        #     ascending=True
+        if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
+            ascending=False
+        else:
+            ascending=True
         func_df = (df[[*cat_columns, num_column]]
                 .groupby(cat_columns)
-                .agg(num=(num_column, func))
+                .agg(num=(num_column, func), count=(num_column, 'count'))
                 .reset_index())
-        if pd.api.types.is_numeric_dtype(config['df'][config['x']]):
-            func_df['temp'] = func_df.groupby(cat_columns[0])['num'].transform('sum')    
-            func_df = (func_df.sort_values(['temp','num'], ascending=True)
-                       .drop('temp', axis=1)  
-                    .rename(columns={'num': num_column})
-                    # .sort_values(columns[0], ascending=ascending)
-                    )
-        else:
-            func_df['temp'] = func_df.groupby(cat_columns[0])['num'].transform('sum')    
-            func_df = (func_df.sort_values(['temp','num'], ascending=False)
-                       .drop('temp', axis=1)  
-                    .rename(columns={'num': num_column})
-                    # .sort_values(columns[0], ascending=ascending)
-                    )
+        func_df['temp'] = func_df.groupby(cat_columns[0])['num'].transform('sum')  
+        func_df['count'] = func_df['count'].apply(lambda x: f'= {x}' if x <= 1e3 else 'больше 1000')
+        # func_df['sum_cnt'] = func_df.groupby(cat_columns[0])['cnt'].transform('sum')  
+        # size = df.shape[0]
+        # func_df['sum_cnt_pct'] = func_df['sum_cnt'].apply(lambda x: f'{(x / size):.1%}')
+        # func_df['cnt_in_sum_pct'] = (func_df['cnt'] / func_df['sum_cnt']).apply(lambda x: f'{x:.1%}')
+        func_df = (func_df.sort_values(['temp','num'], ascending=ascending)
+                    .drop('temp', axis=1)  
+                .rename(columns={'num': num_column})
+                # .sort_values(columns[0], ascending=ascending)
+                )
+
         return func_df
     df_for_fig = prepare_df(config)
     x = df_for_fig[config['x']].values
@@ -6178,6 +6170,7 @@ def bar(config: dict, titles_for_axis: dict = None):
     y_axis_label = config['y_axis_label']
     color_axis_label = config['category_axis_label']
     color = df_for_fig[config['category']].values if config['category'] else None
+    custom_data=[df_for_fig['count']]
     if 'text' in config and config['text']:
         if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
             text = [human_readable_number(el) for el in y]
@@ -6185,7 +6178,7 @@ def bar(config: dict, titles_for_axis: dict = None):
             text = [human_readable_number(el) for el in x]
     else:
         text = None
-    fig = px.bar(x=x, y=y, color=color, barmode=config['barmode'], text=text)
+    fig = px.bar(x=x, y=y, color=color, barmode=config['barmode'], text=text, custom_data=custom_data)
     color = []
     for trace in fig.data:
         color.append(trace.marker.color)
@@ -6198,15 +6191,19 @@ def bar(config: dict, titles_for_axis: dict = None):
     else:
         hovertemplate_y = f'y = '    
     if x_axis_label:
-        hovertemplate_color = f'{color_axis_label} = '
+        hovertemplate_color = f'<br>{color_axis_label} = '
     else:
         hovertemplate_color = f'color = '   
     if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
-        hovertemplate = hovertemplate_x + '%{x}<br>' + hovertemplate_y + '%{y:.4s}<br>'
+        hovertemplate = hovertemplate_x + '%{x}<br>' + hovertemplate_y + '%{y:.4s}'
     else:
-        hovertemplate = hovertemplate_x + '%{x:.4s}<br>' + hovertemplate_y + '%{y}<br>'
+        hovertemplate = hovertemplate_x + '%{x:.4s}<br>' + hovertemplate_y + '%{y}'
     if config['category']:
         hovertemplate += hovertemplate_color + '%{data.name}'
+    hovertemplate += f'<br>Размер группы '
+    hovertemplate += '%{customdata[0]}'
+    # hovertemplate += f'<br>cnt_in_sum_pct = '
+    # hovertemplate += '%{customdata[1]}'
     hovertemplate += '<extra></extra>'
     fig.update_traces(hovertemplate=hovertemplate
                     , textfont=dict(
@@ -6314,3 +6311,68 @@ def pairplot(df: pd.DataFrame, titles_for_axis: dict = None):
         ax.spines['right'].set_alpha(0.3)
         ax.spines['bottom'].set_alpha(0.3)
     g.fig.suptitle('Зависимости между числовыми переменными', fontsize=15, x=0.07, y=1.05, fontfamily='open-sans', alpha=0.7, ha='left')                   
+    
+def histogram(column: pd.Series, titles_for_axis: dict = None, nbins: int = 30
+              , width: int = 800, height: int = None, left_quantile: float = 0, right_quantile: float = 1):
+    """
+    Plot a histogram of a Pandas Series using Plotly Express.
+
+    Args:
+    column (pd.Series): The input Pandas Series.
+    titles_for_axis (dict, optional): A dictionary containing the titles for the x-axis and y-axis. Defaults to None.
+    nbins (int, optional): The number of bins in the histogram. Defaults to 30.
+    width (int, optional): The width of the plot. Defaults to 800.
+    height (int, optional): The height of the plot. Defaults to None.
+    left_quantile (float, optional): The left quantile for trimming the data. Defaults to 0.
+    right_quantile (float, optional): The right quantile for trimming the data. Defaults to 1.
+
+    Returns:
+        fig: The Plotly Express figure.
+    """
+    # Обрезаем данные между квантилями
+    trimmed_column = column.between(column.quantile(left_quantile), column.quantile(right_quantile))
+    column =  column[trimmed_column]
+    if not titles_for_axis:
+        title = f'Гистограмма для {column.name}'
+        xaxis_title = 'Значение'
+        yaxis_title = 'Частота'
+    else:
+        title = f'Гистограмма {titles_for_axis[column.name][1]}'
+        xaxis_title = f'{titles_for_axis[column.name][0]}'
+        yaxis_title = 'Частота'
+    fig = px.histogram(column, title=title, histnorm='percent', nbins=nbins)
+    fig.update_layout(
+        xaxis_title=xaxis_title,
+        yaxis_title=yaxis_title
+    )
+    fig.update_traces(hovertemplate='Значение = %{x}<br>Частота = %{y:.2f}', showlegend=False)                         
+    fig.update_layout(
+        width = width
+        , height = height
+        , title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)")
+        # , title={'text': f'<b>{title}</b>'}
+        , xaxis_title=xaxis_title
+        , yaxis_title=yaxis_title
+        , font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)")
+        , xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
+        , yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
+        , xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
+        , yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
+        , legend_title_font_color= 'rgba(0, 0, 0, 0.5)'
+        , legend_font_color = 'rgba(0, 0, 0, 0.5)'
+        , xaxis_linecolor="rgba(0, 0, 0, 0.5)"
+        , yaxis_linecolor="rgba(0, 0, 0, 0.5)"
+        # , margin=dict(l=50, r=50, b=50, t=70)
+        , hoverlabel=dict(bgcolor="white")
+        , xaxis=dict(
+            showgrid=True
+            , gridwidth=1
+            , gridcolor="rgba(0, 0, 0, 0.1)"
+        )
+        , yaxis=dict(
+            showgrid=True
+            , gridwidth=1
+            , gridcolor="rgba(0, 0, 0, 0.07)"
+        )
+    )
+    return fig    
