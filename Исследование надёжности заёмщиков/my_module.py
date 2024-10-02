@@ -96,16 +96,16 @@ def plotly_default_settings(fig):
         # yaxis_linewidth=2
         margin=dict(l=50, r=50, b=50, t=70),
         hoverlabel=dict(bgcolor="white"),
-        xaxis=dict(
-            showgrid=True
-            , gridwidth=1
-            , gridcolor="rgba(0, 0, 0, 0.1)"
-        ),
-        yaxis=dict(
-            showgrid=True
-            , gridwidth=1
-            , gridcolor="rgba(0, 0, 0, 0.07)"        
-        )
+        # xaxis=dict(
+        #     showgrid=True
+        #     , gridwidth=1
+        #     , gridcolor="rgba(0, 0, 0, 0.1)"
+        # ),
+        # yaxis=dict(
+        #     showgrid=True
+        #     , gridwidth=1
+        #     , gridcolor="rgba(0, 0, 0, 0.07)"        
+        # )
     )
 
 
@@ -1744,7 +1744,7 @@ def create_category_column(column, method='custom_intervals', labels=None, n_int
     - right (bool, optional): Whether to include the rightmost edge or not. Default is True.
 
     Returns:
-    - pandas Series: new category column
+    - pandas Series: new category column (categorical type pandas)
 
     Example:
     ```
@@ -1792,7 +1792,7 @@ def create_category_column(column, method='custom_intervals', labels=None, n_int
         raise ValueError(
             "Invalid method. Choose either 'custom_intervals' or 'quantiles'.")
 
-    return category_column
+    return category_column.astype('category')
 
 
 def lemmatize_column(column):
@@ -1833,7 +1833,7 @@ def categorize_column_by_lemmatize(column: pd.Series, categorization_dict: dict,
     то память может переполниться. default (False)
 
     Returns:
-    pd.Series: Категоризированный столбец.
+    pd.Series: Категоризированный столбец. (categorical type pandas)
 
     Пример использования:
     ```
@@ -1881,7 +1881,7 @@ def categorize_column_by_lemmatize(column: pd.Series, categorization_dict: dict,
         return 'Unknown'
 
     lemmatized_column = column.map(lemmatize_text)
-    return lemmatized_column.map(categorize_text)
+    return lemmatized_column.map(categorize_text).astype('category')
 
 
 def target_encoding_linear(df, category_col, value_col, func='mean', alpha=0.1):
@@ -2227,7 +2227,7 @@ def linear_regression_with_vif(df: pd.DataFrame, target_column: str) -> None:
     display(model.summary())
 
 
-def categorical_heatmap_matrix_gen(df):
+def categorical_heatmap_matrix_gen(df, titles_for_axis: dict = None, width=None, height=None):
     """
     Generate a heatmap matrix for all possible combinations of categorical variables in a dataframe.
 
@@ -2236,21 +2236,64 @@ def categorical_heatmap_matrix_gen(df):
 
     Parameters:
     df (pandas DataFrame): Input DataFrame containing categorical variables.
-
+    titles_for_axis (dict):  A dictionary containing titles for the axes.
+    
     Returns:
     None
     """
+    def human_readable_number(x):
+        if x >= 1e6 or x <= -1e6:
+            return f"{x/1e6:.1f} M"
+        elif x >= 1e3 or x <= -1e3:
+            return f"{x/1e3:.1f} k"
+        else:
+            return f"{x:.0f}"
     # Получаем список категориальных переменных
     categorical_cols = df.select_dtypes(include=['category']).columns
-
+    size = df.shape[0]
     # Перебираем все возможные комбинации категориальных переменных
     for col1, col2 in itertools.combinations(categorical_cols, 2):
         # Создаем матрицу тепловой карты
         heatmap_matrix = pd.crosstab(df[col1], df[col2])
 
         # Визуализируем матрицу тепловой карты
-        fig = heatmap(
-            heatmap_matrix, title=f'Матрица тепловой карты для {col1} и {col2}')
+
+        if not titles_for_axis:
+            title = f'Тепловая карта количества для {col1} и {col2}'
+            xaxis_title = f'{col2}'
+            yaxis_title = f'{col1}'
+        else:
+            title = f'Тепловая карта количества для {titles_for_axis[col1][1]} и {titles_for_axis[col2][1]}'
+            xaxis_title = f'{titles_for_axis[col2][0]}'
+            yaxis_title = f'{titles_for_axis[col1][0]}'
+        hovertemplate = xaxis_title + ' = %{x}<br>' + yaxis_title + ' = %{y}<br>Количество = %{z}<extra></extra>'
+        fig = heatmap(heatmap_matrix, title=title)
+        fig.update_traces(hovertemplate=hovertemplate, showlegend=False)   
+        center_color_bar = (heatmap_matrix.max().max() + heatmap_matrix.min().min()) * 0.7
+        annotations = [
+            dict(
+                text=f"{human_readable_number(heatmap_matrix.values[row, col])} ({(heatmap_matrix.values[row, col] * 100 / size):.0f} %)" if heatmap_matrix.values[row, col] * 100 / size >=1
+                    else f"{human_readable_number(heatmap_matrix.values[row, col])} (<1 %)" if heatmap_matrix.values[row, col] * 100 / size >0
+                    else '-',
+                x=col,
+                y=row,
+                showarrow=False,
+                font=dict(
+                    color="black" if heatmap_matrix.values[row, col] <
+                    center_color_bar else "white",
+                    size=16
+                )
+            )
+            for row, col in np.ndindex(heatmap_matrix.values.shape)
+        ]              
+        fig.update_layout(
+            width = width
+            , height = height
+            # , title={'text': f'<b>{title}</b>'}
+            , xaxis_title=xaxis_title
+            , yaxis_title=yaxis_title
+            , annotations=annotations
+        )
         plotly_default_settings(fig)
         yield fig
 
