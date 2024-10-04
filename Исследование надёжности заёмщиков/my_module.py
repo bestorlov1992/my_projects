@@ -937,6 +937,7 @@ def my_info_gen(df, graphs=True, num=True, obj=True, date=True):
         for column in tqdm(obj_columns):
             widgets_ = [func(df[column]) for func in func_obj]
             yield widgets.GridBox(widgets_, layout=layout)
+        
             
 
 

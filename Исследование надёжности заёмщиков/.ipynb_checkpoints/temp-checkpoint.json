@@ -2,7 +2,7 @@
  "cells": [
   {
    "cell_type": "code",
-   "execution_count": 2,
+   "execution_count": 1,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -14,13 +14,13 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 3,
+   "execution_count": 4,
    "metadata": {},
    "outputs": [
     {
      "data": {
       "application/vnd.jupyter.widget-view+json": {
-       "model_id": "55a55ac83b52434497defc58dcf60b22",
+       "model_id": "345807bbf3994fb5b68232d321667f60",
        "version_major": 2,
        "version_minor": 0
       },
@@ -28,7 +28,7 @@
        "Output()"
       ]
      },
-     "execution_count": 3,
+     "execution_count": 4,
      "metadata": {},
      "output_type": "execute_result"
     }
@@ -44,37 +44,41 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 4,
+   "execution_count": 3,
    "metadata": {},
    "outputs": [
     {
      "data": {
       "application/vnd.jupyter.widget-view+json": {
-       "model_id": "5b7345a22b624adda6a140f80b984ed8",
+       "model_id": "9f00f30d0424474ca2cc10782bf8674a",
        "version_major": 2,
        "version_minor": 0
       },
       "text/plain": [
-       "HBox(children=(Output(outputs=({'output_type': 'display_data', 'data': {'text/plain': '   a  b\\n0  1  4\\n1  2 …"
+       "Output()"
       ]
      },
-     "execution_count": 4,
+     "execution_count": 3,
      "metadata": {},
      "output_type": "execute_result"
     }
    ],
    "source": [
-    "widgets.HBox([widget_pct, widget_pct])"
+    "# %%capture output\n",
+    "layout = widgets.Layout(grid_template_columns='auto auto')\n",
+    "res_widget = widgets.Output()\n",
+    "with res_widget:\n",
+    "    display(widgets.GridBox([widget_pct, widget_pct2], layout=layout))\n",
+    "res_widget"
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": 5,
+   "execution_count": null,
    "metadata": {},
    "outputs": [],
    "source": [
-    "%%capture output\n",
-    "widgets.HBox([widget_pct, widget_pct])"
+    "dd"
    ]
   },
   {
@@ -85,42 +89,7 @@
     {
      "data": {
       "application/vnd.jupyter.widget-view+json": {
-       "model_id": "423f55445fd447b6ac2c9e720390d9fe",
-       "version_major": 2,
-       "version_minor": 0
-      },
-      "text/plain": [
-       "HBox(children=(Output(outputs=({'output_type': 'display_data', 'data': {'text/plain': '   a  b\\n0  1  4\\n1  2 …"
-      ]
-     },
-     "metadata": {},
-     "output_type": "display_data"
-    }
-   ],
-   "source": [
-    "output.show()"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": 8,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "%%capture output2\n",
-    "layout = widgets.Layout(grid_template_columns='auto auto')\n",
-    "widgets.GridBox([widget_pct, widget_pct], layout=layout)\n"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": 9,
-   "metadata": {},
-   "outputs": [
-    {
-     "data": {
-      "application/vnd.jupyter.widget-view+json": {
-       "model_id": "c8d960cae6c84bbbb3c29a49e793c2d2",
+       "model_id": "823895c34d2c4c4aa551527493ba5dfd",
        "version_major": 2,
        "version_minor": 0
       },
@@ -130,10 +99,24 @@
      },
      "metadata": {},
      "output_type": "display_data"
+    },
+    {
+     "data": {
+      "application/vnd.jupyter.widget-view+json": {
+       "model_id": "75e2d91f858643c1b0d85a85b85833ce",
+       "version_major": 2,
+       "version_minor": 0
+      },
+      "text/plain": [
+       "Output()"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
     }
    ],
    "source": [
-    "output2.show()"
+    "output.show()"
    ]
   },
   {
