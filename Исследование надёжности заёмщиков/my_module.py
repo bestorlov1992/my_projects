@@ -5567,7 +5567,7 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
                       , annotation_position='top', line_dash="dash")
         fig.update_annotations(font_size=16)
         fig.update_traces(
-            hovertemplate='count=%{y}<br>x=%{text}', textposition='none')
+            hovertemplate='Количество = %{y}<br>Разница = %{text}', textposition='none')
         # Remove gap between bars and show white line
         fig.update_layout(
             width=800,
