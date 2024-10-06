@@ -25,14 +25,15 @@ from termcolor import colored
 import scipy.stats as stats
 import pingouin as pg
 import warnings
+import nbformat
+from nbformat import v4
+import json
 
 colorway_for_line = ['rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4', 'rgb(127, 60, 141)', 'rgb(17, 165, 121)', 'rgb(231, 63, 116)',
                      '#03A9F4', 'rgb(242, 183, 1)', '#8B9467', '#FFA07A', '#005A5B', '#66CCCC', '#B690C4']
-colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', "rgba(112, 155, 219, 0.9)", "rgba(99, 113, 156, 0.9)", '#5c6bc0'
-                    ,'#B690C4', 'rgba(17, 100, 120, 0.9)', 'rgba(194, 143, 113, 0.8)', '#B690C4', '#03A9F4', '#8B9467'       
-                    , '#a771f2', 'rgba(102, 204, 204, 0.9)','rgba(168, 70, 90, 0.9)', 'rgba(50, 152, 103, 0.8)','#8F7A7A','rgba(156, 130, 217, 0.9)'               
-]
+colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', "rgba(112, 155, 219, 0.9)", "rgba(99, 113, 156, 0.9)", '#5c6bc0', '#B690C4', 'rgba(17, 100, 120, 0.9)', 'rgba(194, 143, 113, 0.8)', '#B690C4', '#03A9F4', '#8B9467', '#a771f2', 'rgba(102, 204, 204, 0.9)', 'rgba(168, 70, 90, 0.9)', 'rgba(50, 152, 103, 0.8)', '#8F7A7A', 'rgba(156, 130, 217, 0.9)'
+                    ]
 # colorway_for_bar = ['rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
 #                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
 #                     '#5c6bc0', '#005A5B', '#63719C', '#03A9F4', '#66CCCC', '#a771f2', 'rgba(128, 60, 170, 0.9)', '#049CB3', '#84a9e9', '#B690C4',
@@ -104,7 +105,7 @@ def plotly_default_settings(fig):
         # yaxis=dict(
         #     showgrid=True
         #     , gridwidth=1
-        #     , gridcolor="rgba(0, 0, 0, 0.07)"        
+        #     , gridcolor="rgba(0, 0, 0, 0.07)"
         # )
     )
 
@@ -894,7 +895,6 @@ def my_info_gen(df, graphs=True, num=True, obj=True, date=True):
                          )
     yield make_widget_all_frame(df)
 
-
     funcs_num = [make_widget_summary, make_widget_pct,
                  make_widget_std, make_widget_value_counts]
     func_obj = [make_widget_summary_obj, make_widget_value_counts_obj]
@@ -911,7 +911,7 @@ def my_info_gen(df, graphs=True, num=True, obj=True, date=True):
         for column in tqdm(date_columns):
             widgets_ = [func(df[column]) for func in func_date]
             yield widgets.GridBox(widgets_, layout=layout)
-            
+
     if num:
         num_columns = filter(
             lambda x: pd.api.types.is_numeric_dtype(df[x]), df.columns)
@@ -924,7 +924,7 @@ def my_info_gen(df, graphs=True, num=True, obj=True, date=True):
         for column in tqdm(num_columns):
             widgets_ = [func(df[column]) for func in funcs_num]
             yield widgets.GridBox(widgets_, layout=layout)
-            
+
     if obj:
         obj_columns = filter(
             lambda x: not pd.api.types.is_numeric_dtype(df[x]) and not pd.api.types.is_datetime64_any_dtype(df[x]), df.columns)
@@ -937,8 +937,6 @@ def my_info_gen(df, graphs=True, num=True, obj=True, date=True):
         for column in tqdm(obj_columns):
             widgets_ = [func(df[column]) for func in func_obj]
             yield widgets.GridBox(widgets_, layout=layout)
-        
-            
 
 
 def check_duplicated(df):
@@ -1007,7 +1005,7 @@ def check_duplicated_combinations_gen(df, n=2):
                                                                                      }]))
     yield
     if n < 3:
-        return    
+        return
     c3 = itertools.combinations(df.columns, 3)
     dupl_c3_list = []
     print(f'Group by 3 columns')
@@ -2238,7 +2236,7 @@ def categorical_heatmap_matrix_gen(df, titles_for_axis: dict = None, width=None,
     Parameters:
     df (pandas DataFrame): Input DataFrame containing categorical variables.
     titles_for_axis (dict):  A dictionary containing titles for the axes.
-    
+
     Returns:
     None
     """
@@ -2267,15 +2265,18 @@ def categorical_heatmap_matrix_gen(df, titles_for_axis: dict = None, width=None,
             title = f'Тепловая карта количества для {titles_for_axis[col1][1]} и {titles_for_axis[col2][1]}'
             xaxis_title = f'{titles_for_axis[col2][0]}'
             yaxis_title = f'{titles_for_axis[col1][0]}'
-        hovertemplate = xaxis_title + ' = %{x}<br>' + yaxis_title + ' = %{y}<br>Количество = %{z}<extra></extra>'
+        hovertemplate = xaxis_title + \
+            ' = %{x}<br>' + yaxis_title + \
+            ' = %{y}<br>Количество = %{z}<extra></extra>'
         fig = heatmap(heatmap_matrix, title=title)
-        fig.update_traces(hovertemplate=hovertemplate, showlegend=False)   
-        center_color_bar = (heatmap_matrix.max().max() + heatmap_matrix.min().min()) * 0.7
+        fig.update_traces(hovertemplate=hovertemplate, showlegend=False)
+        center_color_bar = (heatmap_matrix.max().max() +
+                            heatmap_matrix.min().min()) * 0.7
         annotations = [
             dict(
-                text=f"{human_readable_number(heatmap_matrix.values[row, col])} ({(heatmap_matrix.values[row, col] * 100 / size):.0f} %)" if heatmap_matrix.values[row, col] * 100 / size >=1
-                    else f"{human_readable_number(heatmap_matrix.values[row, col])} (<1 %)" if heatmap_matrix.values[row, col] * 100 / size >0
-                    else '-',
+                text=f"{human_readable_number(heatmap_matrix.values[row, col])} ({(heatmap_matrix.values[row, col] * 100 / size):.0f} %)" if heatmap_matrix.values[row, col] * 100 / size >= 1
+                else f"{human_readable_number(heatmap_matrix.values[row, col])} (<1 %)" if heatmap_matrix.values[row, col] * 100 / size > 0
+                else '-',
                 x=col,
                 y=row,
                 showarrow=False,
@@ -2286,14 +2287,10 @@ def categorical_heatmap_matrix_gen(df, titles_for_axis: dict = None, width=None,
                 )
             )
             for row, col in np.ndindex(heatmap_matrix.values.shape)
-        ]              
+        ]
         fig.update_layout(
-            width = width
-            , height = height
             # , title={'text': f'<b>{title}</b>'}
-            , xaxis_title=xaxis_title
-            , yaxis_title=yaxis_title
-            , annotations=annotations
+            width=width, height=height, xaxis_title=xaxis_title, yaxis_title=yaxis_title, annotations=annotations
         )
         plotly_default_settings(fig)
         yield fig
@@ -3513,6 +3510,7 @@ def graph_analysis(df, cat_coluns, num_column):
                       )
     fig.show()
 
+
 def graph_analysis_gen(df):
     category_columns = [
         col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
@@ -3524,6 +3522,7 @@ def graph_analysis_gen(df):
             # print(list(cat_pair) + num_column)
             graph_analysis(df, list(cat_pair), num_column)
             yield [num_column] + list(cat_pair)
+
 
 def calculate_cohens_d(sample1: pd.Series, sample2: pd.Series, equal_var=False) -> float:
     """
@@ -5560,11 +5559,9 @@ def bootstrap_diff_2sample(sample1: pd.Series, sample2: pd.Series,
         fig.data[0].marker.color = colors
         fig.data[0].text = text
         fig.add_vline(x=ci_lower, line_width=2, line_color="#049CB3",
-                      annotation_text=f"{ci_lower:.2f}"
-                      , annotation_position='top', line_dash="dash")
+                      annotation_text=f"{ci_lower:.2f}", annotation_position='top', line_dash="dash")
         fig.add_vline(x=ci_upper, line_width=2, line_color="#049CB3",
-                      annotation_text=f"{ci_upper:.2f}"
-                      , annotation_position='top', line_dash="dash")
+                      annotation_text=f"{ci_upper:.2f}", annotation_position='top', line_dash="dash")
         fig.update_annotations(font_size=16)
         fig.update_traces(
             hovertemplate='Количество = %{y}<br>Разница = %{text}', textposition='none')
@@ -5780,6 +5777,7 @@ def bootstrap_single_sample(sample: pd.Series,
 
         return tuple(res)
 
+
 def check_duplicated_value_in_df(df):
     '''
     Функция проверяет на дубли столбцы датафрейма и выводит количество дублей в каждом столбце
@@ -5850,6 +5848,7 @@ def normalize_string_series(column: pd.Series) -> pd.Series:
         raise ValueError("Series must contain strings")
     return column.str.lower().str.strip().str.replace(r'\s+', ' ', regex=True)
 
+
 def analys_column_by_category(df: pd.DataFrame, df_for_analys: pd.DataFrame, column_for_analys: str) -> None:
     """
     Show statisctic column by categories in DataFrame
@@ -5866,10 +5865,10 @@ def analys_column_by_category(df: pd.DataFrame, df_for_analys: pd.DataFrame, col
         col for col in df.columns if pd.api.types.is_categorical_dtype(df[col])]
     for category_column in category_columns:
         analys_df = df_for_analys.groupby(
-                    category_column).size().reset_index(name='count')
+            category_column).size().reset_index(name='count')
         summ_counts = analys_df['count'].sum()
         all_df = df.groupby(
-                    category_column).size().reset_index(name='total')
+            category_column).size().reset_index(name='total')
         result_df = pd.merge(analys_df, all_df, on=category_column)
         result_df['count_in_total_pct'] = (
             result_df['count'] / result_df['total'])
@@ -5877,7 +5876,8 @@ def analys_column_by_category(df: pd.DataFrame, df_for_analys: pd.DataFrame, col
             result_df['count'] / summ_counts)
         result_df['total_in_sum_total_pct'] = (
             result_df['total'] / size_all)
-        result_df['diff_sum_pct'] = result_df['count_in_sum_count_pct'] - result_df['total_in_sum_total_pct']
+        result_df['diff_sum_pct'] = result_df['count_in_sum_count_pct'] - \
+            result_df['total_in_sum_total_pct']
         display(result_df[[category_column, 'total', 'count', 'count_in_total_pct', 'count_in_sum_count_pct', 'total_in_sum_total_pct', 'diff_sum_pct']].style
                 .set_caption(f'Value in "{column_for_analys}" by category "{category_column}"')
                 .set_table_styles([{'selector': 'caption',
@@ -5885,6 +5885,7 @@ def analys_column_by_category(df: pd.DataFrame, df_for_analys: pd.DataFrame, col
                 .format('{:.1%}', subset=['count_in_total_pct', 'count_in_sum_count_pct', 'total_in_sum_total_pct', 'diff_sum_pct'])
                 .hide_index())
         yield
+
 
 def analys_by_category_gen(df, series_for_analys):
     '''
@@ -5907,7 +5908,8 @@ def analys_by_category_gen(df, series_for_analys):
             df, series_for_analys[col], col)
         for _ in gen:
             yield
-            
+
+
 def check_group_count(df, category_columns, value_column):
     '''
     Функция выводит информацию о количестве элементов в группах.  
@@ -5915,42 +5917,43 @@ def check_group_count(df, category_columns, value_column):
     для заполнения пропусков через группы.
     '''
     temp = df.groupby(category_columns)[value_column].agg(
-                lambda x: 1 if x.isna().sum() else -1).dropna()
+        lambda x: 1 if x.isna().sum() else -1).dropna()
     # -1 это группы без пропусков
-    group_with_miss = (temp != -1).sum() / temp.size    
+    group_with_miss = (temp != -1).sum() / temp.size
     print(f'{group_with_miss:.2%} groups have missing values')
     # Посмотрим какой процент групп с пропусками имеют больше 30 элементов
     temp = df.groupby(category_columns)[value_column].agg(
-            lambda x: x.count() > 30 if x.isna().sum() else -1).dropna()
+        lambda x: x.count() > 30 if x.isna().sum() else -1).dropna()
     temp = temp[temp != -1]
     group_with_more_30_elements = (temp == True).sum() / temp.size
     print(f'{group_with_more_30_elements:.2%}  groups with missings have more than 30 elements')
     # Посмотрим какой процент групп с пропусками имеют больше 10 элементов
     temp = df.groupby(category_columns)[value_column].agg(
-            lambda x: x.count() > 10 if x.isna().sum() else -1).dropna()
+        lambda x: x.count() > 10 if x.isna().sum() else -1).dropna()
     temp = temp[temp != -1]
     group_with_more_10_elements = (temp == True).sum() / temp.size
     print(f'{group_with_more_10_elements:.2%}  groups with missings have more than 10 elements')
     # Посмотрим какой процент групп с пропусками имеют больше 5 элементов
     temp = df.groupby(category_columns)[value_column].agg(
-            lambda x: x.count() > 5 if x.isna().sum() else -1).dropna()
+        lambda x: x.count() > 5 if x.isna().sum() else -1).dropna()
     temp = temp[temp != -1]
     group_with_more_5_elements = (temp == True).sum() / temp.size
-    print(f'{group_with_more_5_elements:.2%}  groups with missings have more than 5 elements')        
+    print(f'{group_with_more_5_elements:.2%}  groups with missings have more than 5 elements')
     # Посмотрим какой процент групп содержат только NA
     temp = df.groupby(category_columns)[value_column].agg(
-            lambda x: x.count() if x.isna().sum() else -1).dropna()
+        lambda x: x.count() if x.isna().sum() else -1).dropna()
     temp = temp[temp != -1]
     group_with_ontly_missings = (temp == 0).sum() / temp.size
-    print(f'{group_with_ontly_missings:.2%}  groups have only missings')   
+    print(f'{group_with_ontly_missings:.2%}  groups have only missings')
     # Посмотрим сколько всего значений в группах, где только прпоуски
     temp = df.groupby(category_columns)[value_column].agg(
-            lambda x: -1 if x.count() else x.isna().sum() ).dropna()
+        lambda x: -1 if x.count() else x.isna().sum()).dropna()
     temp = temp[temp != -1]
-    missing_cnt = temp.sum()     
-    print(f'{missing_cnt:.0f} missings in groups with only missings')  
-                
-def fill_na_with_function_by_categories(df, category_columns, value_column, func='median', minimal_group_size = 10):
+    missing_cnt = temp.sum()
+    print(f'{missing_cnt:.0f} missings in groups with only missings')
+
+
+def fill_na_with_function_by_categories(df, category_columns, value_column, func='median', minimal_group_size=10):
     """
     Fills missing values in the value_column with the result of the func function, 
     grouping by the category_columns.
@@ -5981,15 +5984,16 @@ def fill_na_with_function_by_categories(df, category_columns, value_column, func
     else:
         # If func is a callable, apply it to each group of values
         return df.groupby(category_columns)[value_column].transform(
-            lambda x: x.fillna(func(x)) if x.count() >= minimal_group_size else x)             
-        
-        
-def quantiles_columns(column, quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]):
+            lambda x: x.fillna(func(x)) if x.count() >= minimal_group_size else x)
+
+
+def quantiles_columns(column, quantiles=[0.05, 0.25, 0.5, 0.75, 0.95]):
     max_ = pretty_value(column.max())
     column_summary = pd.DataFrame({'Max': [max_]})
     for quantile in quantiles:
-        column_summary[f'{quantile * 100:.0f}'] = pretty_value(column.quantile(quantile))
-    min_ = pretty_value(column.min())    
+        column_summary[f'{quantile * 100:.0f}'] = pretty_value(
+            column.quantile(quantile))
+    min_ = pretty_value(column.min())
     column_summary['Min'] = min_
     display(column_summary.T.reset_index().style
             .set_caption(f'Quantiles')
@@ -5999,9 +6003,10 @@ def quantiles_columns(column, quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]):
             .set_properties(**{'text-align': 'left'})
             .hide_columns()
             .hide_index()
-            )                      
-    
-def top_n_values_gen(df: pd.DataFrame, value_column: str, n: int = 10, threshold: int = 20, func = 'sum'):
+            )
+
+
+def top_n_values_gen(df: pd.DataFrame, value_column: str, n: int = 10, threshold: int = 20, func='sum'):
     """
     Возвращает топ n значений в категориальных столбцах df, где значений больше 20, по значению в столбце value_column.
 
@@ -6023,13 +6028,14 @@ def top_n_values_gen(df: pd.DataFrame, value_column: str, n: int = 10, threshold
         if df[column].nunique() > threshold:
             # Группируем данные по столбцу column и рассчитываем сумму по столбцу value_column
             display(df.groupby(column)[value_column].agg(func).sort_values(ascending=False).head(n).to_frame().reset_index().style
-                .set_caption(f'Top in "{column}"')
-                .set_table_styles([{'selector': 'caption',
-                                    'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
-                .format('{:.2f}', subset=value_column)
-                .hide_index())
+                    .set_caption(f'Top in "{column}"')
+                    .set_table_styles([{'selector': 'caption',
+                                        'props': [('font-size', '18px'), ("text-align", "left"), ("font-weight", "bold")]}])
+                    .format('{:.2f}', subset=value_column)
+                    .hide_index())
             yield
-            
+
+
 def bar(config: dict, titles_for_axis: dict = None):
     """
     Creates a bar chart using the Plotly Express library.
@@ -6057,7 +6063,7 @@ def bar(config: dict, titles_for_axis: dict = None):
         - showgrid_y (bool):   Whether to show grid on Y-axis (default is True).
 
     titles_for_axis (dict):  A dictionary containing titles for the axes.
-    
+
     Returns:
     fig (plotly.graph_objs.Figure): The created chart.
 
@@ -6095,7 +6101,7 @@ def bar(config: dict, titles_for_axis: dict = None):
         , textsize = 14
     )
     bar(config)
-    """    
+    """
     # Проверка входных данных
     if not isinstance(config, dict):
         raise TypeError("config must be a dictionary")
@@ -6112,33 +6118,33 @@ def bar(config: dict, titles_for_axis: dict = None):
     if 'func' not in config:
         config['func'] = 'mean'
     if 'barmode' not in config:
-        config['barmode'] = 'group'        
+        config['barmode'] = 'group'
     if 'width' not in config:
-        config['width'] = None  
+        config['width'] = None
     if 'height' not in config:
-        config['height'] = None    
+        config['height'] = None
     if 'textsize' not in config:
-            config['textsize'] = 14    
+        config['textsize'] = 14
     if 'xaxis_show' not in config:
-            config['xaxis_show'] = True
+        config['xaxis_show'] = True
     if 'yaxis_show' not in config:
-            config['yaxis_show'] = True      
+        config['yaxis_show'] = True
     if 'showgrid_x' not in config:
-            config['showgrid_x'] = True              
+        config['showgrid_x'] = True
     if 'showgrid_y' not in config:
-            config['showgrid_y'] = True             
-    if pd.api.types.is_numeric_dtype(config['df'][config['y']]) and 'orientation' in config and config['orientation']  == 'h':
+        config['showgrid_y'] = True
+    if pd.api.types.is_numeric_dtype(config['df'][config['y']]) and 'orientation' in config and config['orientation'] == 'h':
         config['x'], config['y'] = config['y'], config['x']
-                
+
     if titles_for_axis:
         if config['func'] not in ['mean', 'median', 'sum']:
             raise ValueError("func must be in ['mean', 'median', 'sum']")
-        func_for_title = {'mean': ['Среднее', 'Средний', 'Средняя']
-                          , 'median': ['Медианное', 'Медианный', 'Медианная']
-                          , 'sum': ['Суммарное', 'Суммарный', 'Суммарная']}
+        func_for_title = {'mean': ['Среднее', 'Средний', 'Средняя'], 'median': [
+            'Медианное', 'Медианный', 'Медианная'], 'sum': ['Суммарное', 'Суммарный', 'Суммарная']}
         config['x_axis_label'] = titles_for_axis[config['x']][0]
         config['y_axis_label'] = titles_for_axis[config['y']][0]
-        config['category_axis_label'] = titles_for_axis[config['category']][0] if 'category' in config else None
+        config['category_axis_label'] = titles_for_axis[config['category']
+                                                        ][0] if 'category' in config else None
         func = config['func']
         if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
             numeric = titles_for_axis[config["y"]][1]
@@ -6146,27 +6152,28 @@ def bar(config: dict, titles_for_axis: dict = None):
             suffix_type = titles_for_axis[config["y"]][2]
         else:
             numeric = titles_for_axis[config["x"]][1]
-            cat = titles_for_axis[config["y"]][1]   
-            suffix_type = titles_for_axis[config["x"]][2]    
+            cat = titles_for_axis[config["y"]][1]
+            suffix_type = titles_for_axis[config["x"]][2]
         title = f'{func_for_title[func][suffix_type]}'
-        title += f' {numeric} в зависимости от {cat}'                
+        title += f' {numeric} в зависимости от {cat}'
         if 'category' in config and config['category']:
-            title += f' и {titles_for_axis[config["category"]][1]}'  
+            title += f' и {titles_for_axis[config["category"]][1]}'
         config['title'] = title
     else:
         if 'x_axis_label' not in config:
-            config['x_axis_label'] = None  
+            config['x_axis_label'] = None
         if 'y_axis_label' not in config:
-            config['y_axis_label'] = None          
+            config['y_axis_label'] = None
         if 'category_axis_label' not in config:
-            config['category_axis_label'] = None  
+            config['category_axis_label'] = None
         if 'title' not in config:
-            config['title'] = None          
+            config['title'] = None
     if 'category' not in config:
         config['category'] = None
         config['category_axis_label'] = None
     if not isinstance(config['category'], str) and config['category'] is not None:
-        raise ValueError("category must be a string")        
+        raise ValueError("category must be a string")
+
     def human_readable_number(x):
         if x >= 1e6 or x <= -1e6:
             return f"{x/1e6:.1f} M"
@@ -6174,37 +6181,40 @@ def bar(config: dict, titles_for_axis: dict = None):
             return f"{x/1e3:.1f} k"
         else:
             return f"{x:.1f}"
+
     def prepare_df(config: dict):
         df = config['df']
         color = [config['category']] if config['category'] else []
-        if not(pd.api.types.is_numeric_dtype(df[config['x']]) or pd.api.types.is_numeric_dtype(df[config['y']])):
+        if not (pd.api.types.is_numeric_dtype(df[config['x']]) or pd.api.types.is_numeric_dtype(df[config['y']])):
             raise ValueError("At least one of x or y must be numeric.")
         elif pd.api.types.is_numeric_dtype(df[config['y']]):
             cat_columns = [config['x']] + color
             num_column = config['y']
         else:
             cat_columns = [config['y']] + color
-            num_column = config['x']        
+            num_column = config['x']
         func = config.get('func', 'mean')  # default to 'mean' if not provided
         if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
-            ascending=False
+            ascending = False
         else:
-            ascending=True
+            ascending = True
         func_df = (df[[*cat_columns, num_column]]
-                .groupby(cat_columns)
-                .agg(num=(num_column, func), count=(num_column, 'count'))
-                .reset_index())
-        func_df['temp'] = func_df.groupby(cat_columns[0])['num'].transform('sum')  
-        func_df['count'] = func_df['count'].apply(lambda x: f'= {x}' if x <= 1e3 else 'больше 1000')
-        # func_df['sum_cnt'] = func_df.groupby(cat_columns[0])['cnt'].transform('sum')  
+                   .groupby(cat_columns)
+                   .agg(num=(num_column, func), count=(num_column, 'count'))
+                   .reset_index())
+        func_df['temp'] = func_df.groupby(cat_columns[0])[
+            'num'].transform('sum')
+        func_df['count'] = func_df['count'].apply(
+            lambda x: f'= {x}' if x <= 1e3 else 'больше 1000')
+        # func_df['sum_cnt'] = func_df.groupby(cat_columns[0])['cnt'].transform('sum')
         # size = df.shape[0]
         # func_df['sum_cnt_pct'] = func_df['sum_cnt'].apply(lambda x: f'{(x / size):.1%}')
         # func_df['cnt_in_sum_pct'] = (func_df['cnt'] / func_df['sum_cnt']).apply(lambda x: f'{x:.1%}')
-        func_df = (func_df.sort_values(['temp','num'], ascending=ascending)
-                    .drop('temp', axis=1)  
-                .rename(columns={'num': num_column})
-                # .sort_values(columns[0], ascending=ascending)
-                )
+        func_df = (func_df.sort_values(['temp', 'num'], ascending=ascending)
+                   .drop('temp', axis=1)
+                   .rename(columns={'num': num_column})
+                   # .sort_values(columns[0], ascending=ascending)
+                   )
 
         return func_df
     df_for_fig = prepare_df(config)
@@ -6213,8 +6223,9 @@ def bar(config: dict, titles_for_axis: dict = None):
     x_axis_label = config['x_axis_label']
     y_axis_label = config['y_axis_label']
     color_axis_label = config['category_axis_label']
-    color = df_for_fig[config['category']].values if config['category'] else None
-    custom_data=[df_for_fig['count']]
+    color = df_for_fig[config['category']
+                       ].values if config['category'] else None
+    custom_data = [df_for_fig['count']]
     if 'text' in config and config['text']:
         if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
             text = [human_readable_number(el) for el in y]
@@ -6222,7 +6233,8 @@ def bar(config: dict, titles_for_axis: dict = None):
             text = [human_readable_number(el) for el in x]
     else:
         text = None
-    fig = px.bar(x=x, y=y, color=color, barmode=config['barmode'], text=text, custom_data=custom_data)
+    fig = px.bar(x=x, y=y, color=color,
+                 barmode=config['barmode'], text=text, custom_data=custom_data)
     color = []
     for trace in fig.data:
         color.append(trace.marker.color)
@@ -6233,15 +6245,17 @@ def bar(config: dict, titles_for_axis: dict = None):
     if x_axis_label:
         hovertemplate_y = f'{y_axis_label} = '
     else:
-        hovertemplate_y = f'y = '    
+        hovertemplate_y = f'y = '
     if x_axis_label:
         hovertemplate_color = f'<br>{color_axis_label} = '
     else:
-        hovertemplate_color = f'color = '   
+        hovertemplate_color = f'color = '
     if pd.api.types.is_numeric_dtype(config['df'][config['y']]):
-        hovertemplate = hovertemplate_x + '%{x}<br>' + hovertemplate_y + '%{y:.4s}'
+        hovertemplate = hovertemplate_x + \
+            '%{x}<br>' + hovertemplate_y + '%{y:.4s}'
     else:
-        hovertemplate = hovertemplate_x + '%{x:.4s}<br>' + hovertemplate_y + '%{y}'
+        hovertemplate = hovertemplate_x + \
+            '%{x:.4s}<br>' + hovertemplate_y + '%{y}'
     if config['category']:
         hovertemplate += hovertemplate_color + '%{data.name}'
     hovertemplate += f'<br>Размер группы '
@@ -6249,57 +6263,31 @@ def bar(config: dict, titles_for_axis: dict = None):
     # hovertemplate += f'<br>cnt_in_sum_pct = '
     # hovertemplate += '%{customdata[1]}'
     hovertemplate += '<extra></extra>'
-    fig.update_traces(hovertemplate=hovertemplate
-                    , textfont=dict(
-                        family='Open Sans'
-                        , size=config['textsize']  # Размер шрифта
-                    # color='black'  # Цвет текста
-                    )
-                    , textposition='auto'  # Положение текстовых меток (outside или inside)) 
-                )                           
+    fig.update_traces(hovertemplate=hovertemplate, textfont=dict(
+        family='Open Sans', size=config['textsize']  # Размер шрифта
+        # color='black'  # Цвет текста
+    ), textposition='auto'  # Положение текстовых меток (outside или inside))
+    )
     fig.update_layout(
-        width = config['width']
-        , height = config['height']
-        , title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)")
-        , title={'text': config["title"]}
         # , title={'text': f'<b>{title}</b>'}
-        , xaxis_title=x_axis_label
-        , yaxis_title=y_axis_label
-        , legend_title_text=color_axis_label
-        , font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)")
-        , xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
-        , yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
-        , xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
-        , yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
-        , legend_title_font_color= 'rgba(0, 0, 0, 0.5)'
-        , legend_font_color = 'rgba(0, 0, 0, 0.5)'
-        , xaxis_linecolor="rgba(0, 0, 0, 0.5)"
-        , yaxis_linecolor="rgba(0, 0, 0, 0.5)"
         # , margin=dict(l=50, r=50, b=50, t=70)
-        , hoverlabel=dict(bgcolor="white")
-        , xaxis=dict(
-            visible=config['xaxis_show']
-            , showgrid=config['showgrid_x']
-            , gridwidth=1
-            , gridcolor="rgba(0, 0, 0, 0.1)"
-        )
-        , yaxis=dict(
-            visible=config['yaxis_show']
-            , showgrid=config['showgrid_y']
-            , gridwidth=1
-            , gridcolor="rgba(0, 0, 0, 0.07)"
+        width=config['width'], height=config['height'], title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)"), title={'text': config["title"]}, xaxis_title=x_axis_label, yaxis_title=y_axis_label, legend_title_text=color_axis_label, font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)"), xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"), yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"), xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"), yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"), legend_title_font_color='rgba(0, 0, 0, 0.5)', legend_font_color='rgba(0, 0, 0, 0.5)', xaxis_linecolor="rgba(0, 0, 0, 0.5)", yaxis_linecolor="rgba(0, 0, 0, 0.5)", hoverlabel=dict(bgcolor="white"), xaxis=dict(
+            visible=config['xaxis_show'], showgrid=config['showgrid_x'], gridwidth=1, gridcolor="rgba(0, 0, 0, 0.1)"
+        ), yaxis=dict(
+            visible=config['yaxis_show'], showgrid=config['showgrid_y'], gridwidth=1, gridcolor="rgba(0, 0, 0, 0.07)"
         )
     )
     if pd.api.types.is_numeric_dtype(config['df'][config['x']]):
         # Чтобы сортировка была по убыванию вернего значения, нужно отсортировать по последнего значению в x
         traces = list(fig.data)
-        traces.sort(key = lambda x: x.x[-1])
+        traces.sort(key=lambda x: x.x[-1])
         fig.data = traces
         color = color[::-1]
         for i, trace in enumerate(fig.data):
             trace.marker.color = color[i]
         fig.update_layout(legend={'traceorder': 'reversed'})
     return fig
+
 
 def pairplot(df: pd.DataFrame, titles_for_axis: dict = None):
     """
@@ -6308,10 +6296,10 @@ def pairplot(df: pd.DataFrame, titles_for_axis: dict = None):
     Parameters:
     df (pd.DataFrame): The input DataFrame containing numerical variables.
     titles_for_axis (dict):  A dictionary containing titles for the axes.
-    
+
     Returns:
     None
-    
+
     Example:
     titles_for_axis = dict(
         # numeric column
@@ -6319,17 +6307,17 @@ def pairplot(df: pd.DataFrame, titles_for_axis: dict = None):
         , age = 'Возраст'
         , total_income = 'Доход'    
     )
-    """    
+    """
     def human_readable_number(x):
-            if x >= 1e6 or x <= -1e6:
-                return f"{x/1e6:.1f}M"
-            elif x >= 1e3 or x <= -1e3:
-                return f"{x/1e3:.1f}k"
-            else:
-                return f"{x:.1f}"
-    g = sns.pairplot(df, markers=["o"], 
-                            plot_kws={'color': (128/255, 60/255, 170/255, 0.9)},
-                            diag_kws={'color': (128/255, 60/255, 170/255, 0.9)})            
+        if x >= 1e6 or x <= -1e6:
+            return f"{x/1e6:.1f}M"
+        elif x >= 1e3 or x <= -1e3:
+            return f"{x/1e3:.1f}k"
+        else:
+            return f"{x:.1f}"
+    g = sns.pairplot(df, markers=["o"],
+                     plot_kws={'color': (128/255, 60/255, 170/255, 0.9)},
+                     diag_kws={'color': (128/255, 60/255, 170/255, 0.9)})
     for ax in g.axes.flatten():
         xlabel = ax.get_xlabel()
         ylabel = ax.get_ylabel()
@@ -6344,20 +6332,21 @@ def pairplot(df: pd.DataFrame, titles_for_axis: dict = None):
         for label in xticklabels:
             # if label.get_text():
             #     label.set_text(human_readable_number(int(label.get_text().replace('−', '-'))))  # modify the label text
-            label.set_alpha(0.6) 
+            label.set_alpha(0.6)
         yticklabels = ax.get_yticklabels()
         for label in yticklabels:
             # if label.get_text():
             #     label.set_text(human_readable_number(int(label.get_text().replace('−', '-'))))  # modify the label text
-            label.set_alpha(0.6)  
+            label.set_alpha(0.6)
         ax.spines['top'].set_alpha(0.3)
         ax.spines['left'].set_alpha(0.3)
         ax.spines['right'].set_alpha(0.3)
         ax.spines['bottom'].set_alpha(0.3)
-    g.fig.suptitle('Зависимости между числовыми переменными', fontsize=15, x=0.07, y=1.05, fontfamily='open-sans', alpha=0.7, ha='left')                   
-    
-def histogram(column: pd.Series, titles_for_axis: dict = None, nbins: int = 30
-              , width: int = 800, height: int = None, left_quantile: float = 0, right_quantile: float = 1):
+    g.fig.suptitle('Зависимости между числовыми переменными', fontsize=15,
+                   x=0.07, y=1.05, fontfamily='open-sans', alpha=0.7, ha='left')
+
+
+def histogram(column: pd.Series, titles_for_axis: dict = None, nbins: int = 30, width: int = 800, height: int = None, left_quantile: float = 0, right_quantile: float = 1):
     """
     Plot a histogram of a Pandas Series using Plotly Express.
 
@@ -6374,8 +6363,9 @@ def histogram(column: pd.Series, titles_for_axis: dict = None, nbins: int = 30
         fig: The Plotly Express figure.
     """
     # Обрезаем данные между квантилями
-    trimmed_column = column.between(column.quantile(left_quantile), column.quantile(right_quantile))
-    column =  column[trimmed_column]
+    trimmed_column = column.between(column.quantile(
+        left_quantile), column.quantile(right_quantile))
+    column = column[trimmed_column]
     if not titles_for_axis:
         title = f'Гистограмма для {column.name}'
         xaxis_title = 'Значение'
@@ -6389,37 +6379,19 @@ def histogram(column: pd.Series, titles_for_axis: dict = None, nbins: int = 30
         xaxis_title=xaxis_title,
         yaxis_title=yaxis_title
     )
-    fig.update_traces(hovertemplate='Значение = %{x}<br>Частота = %{y:.2f}', showlegend=False)                         
+    fig.update_traces(
+        hovertemplate='Значение = %{x}<br>Частота = %{y:.2f}', showlegend=False)
     fig.update_layout(
-        width = width
-        , height = height
-        , title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)")
         # , title={'text': f'<b>{title}</b>'}
-        , xaxis_title=xaxis_title
-        , yaxis_title=yaxis_title
-        , font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)")
-        , xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
-        , yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
-        , xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
-        , yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
-        , legend_title_font_color= 'rgba(0, 0, 0, 0.5)'
-        , legend_font_color = 'rgba(0, 0, 0, 0.5)'
-        , xaxis_linecolor="rgba(0, 0, 0, 0.5)"
-        , yaxis_linecolor="rgba(0, 0, 0, 0.5)"
-        # , margin=dict(l=50, r=50, b=50, t=70)
-        , hoverlabel=dict(bgcolor="white")
-        , xaxis=dict(
-            showgrid=True
-            , gridwidth=1
-            , gridcolor="rgba(0, 0, 0, 0.1)"
-        )
-        , yaxis=dict(
-            showgrid=True
-            , gridwidth=1
-            , gridcolor="rgba(0, 0, 0, 0.07)"
+        width=width, height=height, title_font=dict(size=24, color="rgba(0, 0, 0, 0.6)"), xaxis_title=xaxis_title, yaxis_title=yaxis_title, font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)"), xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"), yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"), xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"), yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"), legend_title_font_color='rgba(0, 0, 0, 0.5)', legend_font_color='rgba(0, 0, 0, 0.5)', xaxis_linecolor="rgba(0, 0, 0, 0.5)", yaxis_linecolor="rgba(0, 0, 0, 0.5)"        # , margin=dict(l=50, r=50, b=50, t=70)
+        , hoverlabel=dict(bgcolor="white"), xaxis=dict(
+            showgrid=True, gridwidth=1, gridcolor="rgba(0, 0, 0, 0.1)"
+        ), yaxis=dict(
+            showgrid=True, gridwidth=1, gridcolor="rgba(0, 0, 0, 0.07)"
         )
     )
-    return fig    
+    return fig
+
 
 def categorical_graph_analys_gen(df, titles_for_axis: dict = None, width=None, height=None):
     """
@@ -6431,10 +6403,10 @@ def categorical_graph_analys_gen(df, titles_for_axis: dict = None, width=None, h
     Parameters:
     df (pandas DataFrame): Input DataFrame containing categorical variables.
     titles_for_axis (dict):  A dictionary containing titles for the axes.
-    
+
     Returns:
     None
-    
+
     Example:
     titles_for_axis = dict(
         # numeric column (0 - средний род, 1 - мужской род, 2 - женский род) (Середнее образовние, средний доход, средняя температура) )
@@ -6481,8 +6453,8 @@ def categorical_graph_analys_gen(df, titles_for_axis: dict = None, width=None, h
             yaxis_title_for_figs_normolized_by_col = 'Доля'
             legend_title_normolized_by_col = f'{col2}'
             xaxis_title_for_figs_normolized_by_row = f'{col2}'
-            yaxis_title_for_figs_normolized_by_row = 'Доля'  
-            legend_title_normolized_by_row = f'{col1}'                      
+            yaxis_title_for_figs_normolized_by_row = 'Доля'
+            legend_title_normolized_by_row = f'{col1}'
         else:
             title_heatmap = f'Тепловая карта долей для {titles_for_axis[col1][1]} и {titles_for_axis[col2][1]}'
             title_bar = f'Распределение долей для {titles_for_axis[col1][1]} и {titles_for_axis[col2][1]}'
@@ -6495,9 +6467,9 @@ def categorical_graph_analys_gen(df, titles_for_axis: dict = None, width=None, h
             yaxis_title_for_figs_normolized_by_col = 'Доля'
             legend_title_normolized_by_col = f'{titles_for_axis[col2][0]}'
             xaxis_title_for_figs_normolized_by_row = f'{titles_for_axis[col2][0]}'
-            yaxis_title_for_figs_normolized_by_row = 'Доля'  
-            legend_title_normolized_by_row = f'{titles_for_axis[col1][0]}'              
-            
+            yaxis_title_for_figs_normolized_by_row = 'Доля'
+            legend_title_normolized_by_row = f'{titles_for_axis[col1][0]}'
+
             # title = f'Тепловая карта количества для {titles_for_axis[col1][1]} и {titles_for_axis[col2][1]}'
             # xaxis_title = f'{titles_for_axis[col1][0]}'
             # yaxis_title = f'{titles_for_axis[col2][0]}'
@@ -6506,190 +6478,459 @@ def categorical_graph_analys_gen(df, titles_for_axis: dict = None, width=None, h
         # all
         size_all = crosstab_for_figs.sum().sum()
         crosstab_for_figs_all = crosstab_for_figs * 100 / size_all
-        crosstab_for_figs_all = pd.concat([crosstab_for_figs_all, crosstab_for_figs], axis=1, keys=['data', 'customdata'])
+        crosstab_for_figs_all = pd.concat(
+            [crosstab_for_figs_all, crosstab_for_figs], axis=1, keys=['data', 'customdata'])
         crosstab_for_figs_all['sum_row'] = crosstab_for_figs_all.sum(axis=1)
-        crosstab_for_figs_all = crosstab_for_figs_all.sort_values('sum_row', ascending=False).drop('sum_row', axis=1, level=0)
-        crosstab_for_figs_all = pd.concat([crosstab_for_figs_all['data'], crosstab_for_figs_all['customdata']], axis=0, keys=['data', 'customdata'])
-        crosstab_for_figs_all = crosstab_for_figs_all.sort_values(crosstab_for_figs_all.index[0], axis=1, ascending=False)
-        crosstab_for_figs_all = pd.concat([crosstab_for_figs_all.loc['data'], crosstab_for_figs_all.loc['customdata']], axis=1, keys=['data', 'customdata'])
+        crosstab_for_figs_all = crosstab_for_figs_all.sort_values(
+            'sum_row', ascending=False).drop('sum_row', axis=1, level=0)
+        crosstab_for_figs_all = pd.concat(
+            [crosstab_for_figs_all['data'], crosstab_for_figs_all['customdata']], axis=0, keys=['data', 'customdata'])
+        crosstab_for_figs_all = crosstab_for_figs_all.sort_values(
+            crosstab_for_figs_all.index[0], axis=1, ascending=False)
+        crosstab_for_figs_all = pd.concat(
+            [crosstab_for_figs_all.loc['data'], crosstab_for_figs_all.loc['customdata']], axis=1, keys=['data', 'customdata'])
         customdata_all = crosstab_for_figs_all['customdata'].values.T.tolist()
         # col
         col_sum_count = crosstab_for_figs.sum()
         crosstab_for_figs_normolized_by_col = crosstab_for_figs * 100 / col_sum_count
-        crosstab_for_figs_normolized_by_col = pd.concat([crosstab_for_figs_normolized_by_col, crosstab_for_figs], axis=1, keys=['data', 'customdata'])
-        crosstab_for_figs_normolized_by_col['sum_row'] = crosstab_for_figs_normolized_by_col['data'].sum(axis=1)
-        crosstab_for_figs_normolized_by_col = crosstab_for_figs_normolized_by_col.sort_values('sum_row', ascending=False).drop('sum_row', axis=1, level=0)
-        crosstab_for_figs_normolized_by_col = pd.concat([crosstab_for_figs_normolized_by_col['data'], crosstab_for_figs_normolized_by_col['customdata']], axis=0, keys=['data', 'customdata'])
-        crosstab_for_figs_normolized_by_col = crosstab_for_figs_normolized_by_col.sort_values(crosstab_for_figs_normolized_by_col.index[0], axis=1, ascending=False)
-        crosstab_for_figs_normolized_by_col = pd.concat([crosstab_for_figs_normolized_by_col.loc['data'], crosstab_for_figs_normolized_by_col.loc['customdata']], axis=1, keys=['data', 'customdata'])
-        customdata_normolized_by_col = crosstab_for_figs_normolized_by_col['customdata'].values.T.tolist()
+        crosstab_for_figs_normolized_by_col = pd.concat(
+            [crosstab_for_figs_normolized_by_col, crosstab_for_figs], axis=1, keys=['data', 'customdata'])
+        crosstab_for_figs_normolized_by_col['sum_row'] = crosstab_for_figs_normolized_by_col['data'].sum(
+            axis=1)
+        crosstab_for_figs_normolized_by_col = crosstab_for_figs_normolized_by_col.sort_values(
+            'sum_row', ascending=False).drop('sum_row', axis=1, level=0)
+        crosstab_for_figs_normolized_by_col = pd.concat(
+            [crosstab_for_figs_normolized_by_col['data'], crosstab_for_figs_normolized_by_col['customdata']], axis=0, keys=['data', 'customdata'])
+        crosstab_for_figs_normolized_by_col = crosstab_for_figs_normolized_by_col.sort_values(
+            crosstab_for_figs_normolized_by_col.index[0], axis=1, ascending=False)
+        crosstab_for_figs_normolized_by_col = pd.concat(
+            [crosstab_for_figs_normolized_by_col.loc['data'], crosstab_for_figs_normolized_by_col.loc['customdata']], axis=1, keys=['data', 'customdata'])
+        customdata_normolized_by_col = crosstab_for_figs_normolized_by_col['customdata'].values.T.tolist(
+        )
         # row
         row_sum_count = crosstab_for_figs.T.sum()
         crosstab_for_figs_normolized_by_row = crosstab_for_figs.T * 100 / row_sum_count
-        crosstab_for_figs_normolized_by_row = pd.concat([crosstab_for_figs_normolized_by_row, crosstab_for_figs.T], axis=1, keys=['data', 'customdata'])
-        crosstab_for_figs_normolized_by_row['sum_row'] = crosstab_for_figs_normolized_by_row.sum(axis=1)
-        crosstab_for_figs_normolized_by_row = crosstab_for_figs_normolized_by_row.sort_values('sum_row', ascending=False).drop('sum_row', axis=1, level=0)
-        crosstab_for_figs_normolized_by_row = pd.concat([crosstab_for_figs_normolized_by_row['data'], crosstab_for_figs_normolized_by_row['customdata']], axis=0, keys=['data', 'customdata'])
-        crosstab_for_figs_normolized_by_row = crosstab_for_figs_normolized_by_row.sort_values(crosstab_for_figs_normolized_by_row.index[0], axis=1, ascending=False)
-        crosstab_for_figs_normolized_by_row = pd.concat([crosstab_for_figs_normolized_by_row.loc['data'], crosstab_for_figs_normolized_by_row.loc['customdata']], axis=1, keys=['data', 'customdata'])
-        customdata_normolized_by_row = crosstab_for_figs_normolized_by_row['customdata'].values.T.tolist()
+        crosstab_for_figs_normolized_by_row = pd.concat(
+            [crosstab_for_figs_normolized_by_row, crosstab_for_figs.T], axis=1, keys=['data', 'customdata'])
+        crosstab_for_figs_normolized_by_row['sum_row'] = crosstab_for_figs_normolized_by_row.sum(
+            axis=1)
+        crosstab_for_figs_normolized_by_row = crosstab_for_figs_normolized_by_row.sort_values(
+            'sum_row', ascending=False).drop('sum_row', axis=1, level=0)
+        crosstab_for_figs_normolized_by_row = pd.concat(
+            [crosstab_for_figs_normolized_by_row['data'], crosstab_for_figs_normolized_by_row['customdata']], axis=0, keys=['data', 'customdata'])
+        crosstab_for_figs_normolized_by_row = crosstab_for_figs_normolized_by_row.sort_values(
+            crosstab_for_figs_normolized_by_row.index[0], axis=1, ascending=False)
+        crosstab_for_figs_normolized_by_row = pd.concat(
+            [crosstab_for_figs_normolized_by_row.loc['data'], crosstab_for_figs_normolized_by_row.loc['customdata']], axis=1, keys=['data', 'customdata'])
+        customdata_normolized_by_row = crosstab_for_figs_normolized_by_row['customdata'].values.T.tolist(
+        )
         # bar
-        bar_fig_all = px.bar(crosstab_for_figs_all['data'], barmode='group', text_auto=".0f")
-        bar_traces_len_all = len(bar_fig_all.data)     
-        bar_fig_normolized_by_col = px.bar(crosstab_for_figs_normolized_by_col['data'], barmode='group', text_auto=".0f")
-        bar_traces_len_normolized_by_col = len(bar_fig_normolized_by_col.data)    
-        bar_fig_normolized_by_row = px.bar(crosstab_for_figs_normolized_by_row['data'], barmode='group', text_auto=".0f")
-        bar_traces_len_normolized_by_row = len(bar_fig_normolized_by_row.data)               
+        bar_fig_all = px.bar(
+            crosstab_for_figs_all['data'], barmode='group', text_auto=".0f")
+        bar_traces_len_all = len(bar_fig_all.data)
+        bar_fig_normolized_by_col = px.bar(
+            crosstab_for_figs_normolized_by_col['data'], barmode='group', text_auto=".0f")
+        bar_traces_len_normolized_by_col = len(bar_fig_normolized_by_col.data)
+        bar_fig_normolized_by_row = px.bar(
+            crosstab_for_figs_normolized_by_row['data'], barmode='group', text_auto=".0f")
+        bar_traces_len_normolized_by_row = len(bar_fig_normolized_by_row.data)
         # heatmap
-        heatmap_fig_all = px.imshow(crosstab_for_figs_all['data'], text_auto=".0f")
-        heatmap_fig_normolized_by_col = px.imshow(crosstab_for_figs_normolized_by_col['data'], text_auto=".0f")     
-        heatmap_fig_normolized_by_row = px.imshow(crosstab_for_figs_normolized_by_row['data'], text_auto=".0f")
+        heatmap_fig_all = px.imshow(
+            crosstab_for_figs_all['data'], text_auto=".0f")
+        heatmap_fig_normolized_by_col = px.imshow(
+            crosstab_for_figs_normolized_by_col['data'], text_auto=".0f")
+        heatmap_fig_normolized_by_row = px.imshow(
+            crosstab_for_figs_normolized_by_row['data'], text_auto=".0f")
         # add traces
-        heatmap_figs = [heatmap_fig_all, heatmap_fig_normolized_by_col, heatmap_fig_normolized_by_row]
+        heatmap_figs = [
+            heatmap_fig_all, heatmap_fig_normolized_by_col, heatmap_fig_normolized_by_row]
         for fig_heatmap, customdata in zip(heatmap_figs, [crosstab_for_figs_all['customdata'].values, crosstab_for_figs_normolized_by_col['customdata'].values, crosstab_for_figs_normolized_by_row['customdata'].values]):
-            fig_heatmap.update_traces(hovertemplate =f'{xaxis_title_heatmap}'+' = %{x}<br>'+f'{yaxis_title_heatmap}'+'= %{y}<br>Доля = %{z:.1f} %<br>Количество = %{customdata}<extra></extra>'
-                                      , textfont=dict(
-                                            family='Open Sans'
-                                            , size=14))
+            fig_heatmap.update_traces(hovertemplate=f'{xaxis_title_heatmap}'+' = %{x}<br>'+f'{yaxis_title_heatmap}'+'= %{y}<br>Доля = %{z:.1f} %<br>Количество = %{customdata}<extra></extra>', textfont=dict(
+                family='Open Sans', size=14))
             heatmap_traces = fig_heatmap.data
             for trace in heatmap_traces:
                 trace.xgap = 3
                 trace.ygap = 3
                 trace.visible = False
-                trace.customdata = customdata 
-            fig.add_traces(heatmap_traces) 
-  
+                trace.customdata = customdata
+            fig.add_traces(heatmap_traces)
+
         fig.update_layout(coloraxis=dict(colorscale=[
-                          (0, 'rgba(204, 153, 255, 0.1)'), (1, 'rgb(127, 60, 141)')]), hoverlabel=dict(bgcolor='white'))        
+                          (0, 'rgba(204, 153, 255, 0.1)'), (1, 'rgb(127, 60, 141)')]), hoverlabel=dict(bgcolor='white'))
         for fig_i, (fig_bar, customdata) in enumerate(zip([bar_fig_all, bar_fig_normolized_by_col, bar_fig_normolized_by_row], [customdata_all, customdata_normolized_by_col, customdata_normolized_by_row])):
-            fig_bar.update_traces(hovertemplate =f'{xaxis_title_for_figs_all}'+' = %{x}<br>'+f'{legend_title_all}'+'= %{data.name}<br>Доля = %{y:.1f} %<br>Количество = %{customdata}<extra></extra>')
+            fig_bar.update_traces(hovertemplate=f'{xaxis_title_for_figs_all}'+' = %{x}<br>'+f'{legend_title_all}' +
+                                  '= %{data.name}<br>Доля = %{y:.1f} %<br>Количество = %{customdata}<extra></extra>')
             bar_traces = fig_bar.data
             for i, trace in enumerate(bar_traces):
                 if fig_i > 0:
                     trace.visible = False
                 trace.customdata = customdata[i]
-            fig.add_traces(bar_traces)                
-        bar_traces_len = len(bar_traces)     
+            fig.add_traces(bar_traces)
+        bar_traces_len = len(bar_traces)
 
         buttons = [
             dict(label="Общее сравнение", method="update", args=[{
-                "visible": [False, False, False] 
-                            + [True] * bar_traces_len_all
-                            + [False] * bar_traces_len_normolized_by_col
-                            + [False] * bar_traces_len_normolized_by_row
-                , 'xaxis': {'visible': False}, 'yaxis': {'visible': False}
-                , 'hovertemplate' : f'{xaxis_title_for_figs_all}'+' = %{x}<br>'+f'{legend_title_all}'+'= %{data.name}<br>Доля = %{y:.1f} %<br>Количество = %{customdata}<extra></extra>'
-                }
-                , {'title.text': title_bar
-                   , 'xaxis.title': xaxis_title_for_figs_all
-                    , 'yaxis.title': yaxis_title_for_figs_all
-                    , 'legend.title.text': legend_title_all                      
-                   }])  
-            , dict(label="Heatmap", method="update", args=[{
-                "visible": [True, False, False] 
+                "visible": [False, False, False]
+                + [True] * bar_traces_len_all
+                + [False] * bar_traces_len_normolized_by_col
+                + [False] * bar_traces_len_normolized_by_row, 'xaxis': {'visible': False}, 'yaxis': {'visible': False}, 'hovertemplate': f'{xaxis_title_for_figs_all}'+' = %{x}<br>'+f'{legend_title_all}'+'= %{data.name}<br>Доля = %{y:.1f} %<br>Количество = %{customdata}<extra></extra>'
+            }, {'title.text': title_bar, 'xaxis.title': xaxis_title_for_figs_all, 'yaxis.title': yaxis_title_for_figs_all, 'legend.title.text': legend_title_all
+                }]), dict(label="Heatmap", method="update", args=[{
+                    "visible": [True, False, False]
+                    + [False] * bar_traces_len_all
+                    + [False] * bar_traces_len_normolized_by_col
+                    + [False] * bar_traces_len_normolized_by_row, 'xaxis': {'visible': False}, 'yaxis': {'visible': False}, 'hovertemplate': f'{xaxis_title_heatmap}'+' = %{x}<br>'+f'{yaxis_title_heatmap}'+'= %{y}<br>Доля = %{z:.1f} %<br>Количество = %{customdata}<extra></extra>'
+                }, {'title.text': title_heatmap, 'xaxis.title': xaxis_title_heatmap, 'yaxis.title': yaxis_title_heatmap
+                    }]), dict(label=f"Сравнение ({xaxis_title_for_figs_normolized_by_col.lower()})", method="update", args=[{
+                        "visible": [False, False, False]
+                        + [False] *
+                        bar_traces_len_all
+                        + [True] * bar_traces_len_normolized_by_col
+                        + [False] * bar_traces_len_normolized_by_row, 'xaxis': {'visible': False}, 'yaxis': {'visible': False}, 'hovertemplate': f'{xaxis_title_for_figs_normolized_by_col}'+' = %{x}<br>'+f'{legend_title_normolized_by_col}'+'= %{data.name}<br>Доля = %{y:.1f} %<br>Количество = %{customdata}<extra></extra>'
+                    }, {'title.text': title_bar, 'xaxis.title': xaxis_title_for_figs_normolized_by_col, 'yaxis.title': yaxis_title_for_figs_normolized_by_col, 'legend.title.text': legend_title_normolized_by_col
+                        }]), dict(label="Heatmap", method="update", args=[{
+                            "visible": [False, True, False]
                             + [False] * bar_traces_len_all
-                            + [False] * bar_traces_len_normolized_by_col
-                            + [False] * bar_traces_len_normolized_by_row
-                , 'xaxis': {'visible': False}, 'yaxis': {'visible': False}
-                , 'hovertemplate': f'{xaxis_title_heatmap}'+' = %{x}<br>'+f'{yaxis_title_heatmap}'+'= %{y}<br>Доля = %{z:.1f} %<br>Количество = %{customdata}<extra></extra>'
-                }
-                , {'title.text': title_heatmap
-                   , 'xaxis.title': xaxis_title_heatmap
-                    , 'yaxis.title': yaxis_title_heatmap
-                   }])                                
-            , dict(label=f"Сравнение ({xaxis_title_for_figs_normolized_by_col.lower()})", method="update", args=[{
-                "visible": [False, False, False] 
-                            + [False] * bar_traces_len_all
-                            + [True] * bar_traces_len_normolized_by_col
-                            + [False] * bar_traces_len_normolized_by_row
-                , 'xaxis': {'visible': False}, 'yaxis': {'visible': False}
-                , 'hovertemplate' : f'{xaxis_title_for_figs_normolized_by_col}'+' = %{x}<br>'+f'{legend_title_normolized_by_col}'+'= %{data.name}<br>Доля = %{y:.1f} %<br>Количество = %{customdata}<extra></extra>'                
-                }
-                , {'title.text': title_bar
-                   , 'xaxis.title': xaxis_title_for_figs_normolized_by_col
-                    , 'yaxis.title': yaxis_title_for_figs_normolized_by_col
-                    , 'legend.title.text': legend_title_normolized_by_col   
-                   }])                                                                              
-            , dict(label="Heatmap", method="update", args=[{
-                "visible": [False, True, False] 
-                            + [False] * bar_traces_len_all
-                            + [False] * bar_traces_len_normolized_by_col
-                            + [False] * bar_traces_len_normolized_by_row
-                , 'xaxis': {'visible': False}, 'yaxis': {'visible': False}      
-                , 'hovertemplate': f'{xaxis_title_heatmap}'+' = %{x}<br>'+f'{yaxis_title_heatmap}'+'= %{y}<br>Доля = %{z:.1f} %<br>Количество = %{customdata}<extra></extra>'                     
-                }
-                , {'title.text': title_heatmap
-                   , 'xaxis.title': xaxis_title_heatmap
-                    , 'yaxis.title': yaxis_title_heatmap
-                   }])                                                             
-            , dict(label=f"Сравнение ({xaxis_title_for_figs_normolized_by_row.lower()})", method="update", args=[{
-                "visible": [False, False, False] 
-                            + [False] * bar_traces_len_all
-                            + [False] * bar_traces_len_normolized_by_col
-                            + [True] * bar_traces_len_normolized_by_row
-                , 'xaxis': {'visible': False}, 'yaxis': {'visible': False}
-                , 'hovertemplate' : f'{xaxis_title_for_figs_normolized_by_row}'+' = %{x}<br>'+f'{legend_title_normolized_by_row}'+'= %{data.name}<br>Доля = %{y:.1f} %<br>Количество = %{customdata}<extra></extra>'                
-                }
-                , {'title.text': title_bar
-                   , 'xaxis.title': xaxis_title_for_figs_normolized_by_row
-                    , 'yaxis.title': yaxis_title_for_figs_normolized_by_row
-                    , 'legend.title.text': legend_title_normolized_by_row
-                   }])                                                                             
-            , dict(label="Heatmap", method="update", args=[{
-                "visible": [False, False, True] 
-                            + [False] * bar_traces_len_all
-                            + [False] * bar_traces_len_normolized_by_col
-                            + [False] * bar_traces_len_normolized_by_row
-                , 'xaxis': {'visible': False}, 'yaxis': {'visible': False}
-                , 'hovertemplate': f'{yaxis_title_heatmap}'+' = %{x}<br>'+f'{xaxis_title_heatmap}'+'= %{y}<br>Доля = %{z:.1f} %<br>Количество = %{customdata}<extra></extra>'
-                }
-                , {'title.text': title_heatmap
-                   , 'xaxis.title': yaxis_title_heatmap
-                    , 'yaxis.title': xaxis_title_heatmap
-                   }])                                                             
+                            + [False] *
+                            bar_traces_len_normolized_by_col
+                            + [False] * bar_traces_len_normolized_by_row, 'xaxis': {'visible': False}, 'yaxis': {'visible': False}, 'hovertemplate': f'{xaxis_title_heatmap}'+' = %{x}<br>'+f'{yaxis_title_heatmap}'+'= %{y}<br>Доля = %{z:.1f} %<br>Количество = %{customdata}<extra></extra>'
+                        }, {'title.text': title_heatmap, 'xaxis.title': xaxis_title_heatmap, 'yaxis.title': yaxis_title_heatmap
+                            }]), dict(label=f"Сравнение ({xaxis_title_for_figs_normolized_by_row.lower()})", method="update", args=[{
+                                "visible": [False, False, False]
+                                + [False] * bar_traces_len_all
+                                + [False] * bar_traces_len_normolized_by_col
+                                + [True] * bar_traces_len_normolized_by_row, 'xaxis': {'visible': False}, 'yaxis': {'visible': False}, 'hovertemplate': f'{xaxis_title_for_figs_normolized_by_row}'+' = %{x}<br>'+f'{legend_title_normolized_by_row}'+'= %{data.name}<br>Доля = %{y:.1f} %<br>Количество = %{customdata}<extra></extra>'
+                            }, {'title.text': title_bar, 'xaxis.title': xaxis_title_for_figs_normolized_by_row, 'yaxis.title': yaxis_title_for_figs_normolized_by_row, 'legend.title.text': legend_title_normolized_by_row
+                                }]), dict(label="Heatmap", method="update", args=[{
+                                    "visible": [False, False, True]
+                                    + [False] *
+                                    bar_traces_len_all
+                                    + [False] * bar_traces_len_normolized_by_col
+                                    + [False] * bar_traces_len_normolized_by_row, 'xaxis': {'visible': False}, 'yaxis': {'visible': False}, 'hovertemplate': f'{yaxis_title_heatmap}'+' = %{x}<br>'+f'{xaxis_title_heatmap}'+'= %{y}<br>Доля = %{z:.1f} %<br>Количество = %{customdata}<extra></extra>'
+                                }, {'title.text': title_heatmap, 'xaxis.title': yaxis_title_heatmap, 'yaxis.title': xaxis_title_heatmap
+                                    }])
         ]
         # for button in buttons:
         #     button['font'] = dict(color = "rgba(0, 0, 0, 0.6)")
         # Add the buttons to the figure
         fig.update_layout(
-            height=500
-            , updatemenus=[
+            height=500, updatemenus=[
                 dict(
-                    type="buttons"
-                    , font=dict(color="rgba(0, 0, 0, 0.6)")
-                    , buttons=buttons
-                    , direction="left"
-                    , pad={"r": 10, "t": 70}
-                    , showactive=True
-                    , x=0
-                    , xanchor="left"
-                    , y=1.15
-                    , yanchor="bottom")              ]
-            , title_font=dict(size=20, color="rgba(0, 0, 0, 0.6)")
-            , font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)")
-            , title = dict(text = title_bar, y = 0.9)
-            , xaxis_title = xaxis_title_for_figs_all
-            , yaxis_title = yaxis_title_for_figs_all
-            , legend_title_text = legend_title_all              
-            , xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
-            , yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)")
-            , xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
-            , yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)")
-            , legend_title_font_color= 'rgba(0, 0, 0, 0.5)'
-            , legend_font_color = 'rgba(0, 0, 0, 0.5)'
-            , xaxis_linecolor="rgba(0, 0, 0, 0.5)"
-            , yaxis_linecolor="rgba(0, 0, 0, 0.5)"
-            # , xaxis=dict(
+                    type="buttons", font=dict(color="rgba(0, 0, 0, 0.6)"), buttons=buttons, direction="left", pad={"r": 10, "t": 70}, showactive=True, x=0, xanchor="left", y=1.15, yanchor="bottom")], title_font=dict(size=20, color="rgba(0, 0, 0, 0.6)"), font=dict(size=14, family="Open Sans", color="rgba(0, 0, 0, 1)"), title=dict(text=title_bar, y=0.9), xaxis_title=xaxis_title_for_figs_all, yaxis_title=yaxis_title_for_figs_all, legend_title_text=legend_title_all, xaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"), yaxis_title_font=dict(size=18, color="rgba(0, 0, 0, 0.5)"), xaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"), yaxis_tickfont=dict(size=14, color="rgba(0, 0, 0, 0.5)"), legend_title_font_color='rgba(0, 0, 0, 0.5)', legend_font_color='rgba(0, 0, 0, 0.5)', xaxis_linecolor="rgba(0, 0, 0, 0.5)", yaxis_linecolor="rgba(0, 0, 0, 0.5)"            # , xaxis=dict(
             #     showgrid=True
             #     , gridwidth=1
             #     , gridcolor="rgba(0, 0, 0, 0.1)"
             # )
             , yaxis=dict(
-                showgrid=True
-                , gridwidth=1
-                , gridcolor="rgba(0, 0, 0, 0.07)"
-            )            
-            # , margin=dict(l=50, r=50, b=50, t=70)
+                showgrid=True, gridwidth=1, gridcolor="rgba(0, 0, 0, 0.07)"
+            )            # , margin=dict(l=50, r=50, b=50, t=70)
             , hoverlabel=dict(bgcolor="white"))
         # print(col1, col2)
         yield fig
+
+
+def add_links_and_numbers_to_headings(notebook_path: str, mode: str = 'draft', link_type: str = "name", start_level: int = 2):
+    """
+    Добавляет ссылки к заголовкам в ноутбуке.
+
+    Args:
+        notebook_path (str): Путь к ноутбуку.
+        link_type (str, optional): Тип ссылки. Может быть "name" или "id". Defaults to "name".
+        start_level (int): Уровень глав (количество #), с которого начинать нумерацию
+        mode (str): Режим работы функции. Либо 'draft', в этом случае создаться копия файла, либо 'final' в этом случае изменения будут сделаны в исходном файле. Default to 'draft'
+    Returns:
+        None
+
+    Example:
+        - Вариант, который работает почти везде
+            в оглавлении пишем
+            <a href="#Глава-1">Ссылка на главу 1</a>
+            в названии главы пишем
+            # 1 Введение <a name="Глава-1"></a>
+        - Вариант, который не везде работает
+            в оглавлении пишем
+            [Ссылка на главу 1](#name-id)
+            в названии главы пишем
+            <a class="anchor" id="Название-главы"></a>
+            ### Название главы
+        - Упрощенный вариант, работает только в jupyter notebook
+            в оглавлении пишем
+            [Ссылка на главу 1](#Глава-1)
+            в названии главы пишем
+            # 1 Введение
+    """
+    if mode not in ['draft', 'final']:
+        raise ValueError(
+            "Invalid mode. Mode must be either 'draft' or 'final'.")
+    with open(notebook_path, 'r', encoding='utf-8') as in_f:
+        nb_json = json.load(in_f)
+
+    headers = []
+    # Создаем список счетчиков для каждого уровня заголовка
+    counters = [0] * 100
+    is_previous_cell_header = False
+    for cell in nb_json["cells"]:
+        if cell["cell_type"] == "markdown":
+            source = cell["source"]
+            new_source = []
+            for line in source:
+                level = line.count("#")
+                if level >= start_level and not line.strip().endswith("</a>") and not line.strip().endswith("<skip>"):
+                    # Уменьшаем на 1, чтобы название отчета не нумеровалось
+                    level = level - 1
+                    title = line.strip().lstrip("#").lstrip()
+                    # Обновляем счетчики
+                    counters[level - 1] += 1
+                    for i in range(level, len(counters)):
+                        counters[i] = 0
+                    number_parts = [str(counter)
+                                    for counter in counters[:level]]
+                    chapter_number = ".".join(number_parts)
+                    # для глав с одной цифрой добавляем точку, чтобы было 1. Название главы, для остальных уровней в конкце не будет точки
+                    if level + 1 == start_level:
+                        chapter_number += '.'
+                    # Формируем пронумерованный заголовок
+                    title_text = f"{(level + 1) * '#'} {chapter_number} {title.strip()}"
+                    text_for_ref = f'{chapter_number}-{title.strip()}'.replace(
+                        ' ', '-').replace('.', '-').replace(',', '-')
+                    if link_type == "name":
+                        header = f"{title_text}<a name='{text_for_ref}'></a>"
+                    elif link_type == "id":
+                        header = f"{title_text}<a class='anchor' id='{text_for_ref}'></a>"
+                    else:
+                        raise ValueError(
+                            "Неправильный тип ссылки. Должно быть 'name' или 'id'.")
+                    if not is_previous_cell_header:
+                        header += '\n<a href="#ref_to_toc">вернуться к оглавлению</a>'
+                    new_source.append(header)
+                    is_previous_cell_header = True
+                else:
+                    is_previous_cell_header = False
+                    new_source.append(line)
+            cell["source"] = new_source
+        else:
+            is_previous_cell_header = False
+
+    # Convert nb_json to nbformat object
+    nb = nbformat.reads(json.dumps(nb_json), as_version=4)
+
+    # Save the nbformat object to the file
+    if mode == 'draft':
+        output_filename = 'temp_' + notebook_path
+    else:
+        output_filename = notebook_path
+    with open(output_filename, 'w', encoding='utf-8') as out_f:
+        nbformat.write(nb, out_f, version=4)
+
+
+def generate_toc(notebook_path: str, mode: str = 'draft', indent_char: str = "&emsp;", link_type: str = "html", start_level: int = 2):
+    """
+    Генерирует оглавление для ноутбука.
+
+    Args:
+        notebook_path (str): Путь к ноутбуку.
+        indent_char (str, optional): Символ для отступа. Defaults to "&emsp;".
+        link_type (str, optional): Тип ссылки. Может быть "markdown" или "html". Defaults to "html".
+        start_level (int): Уровень глав (количество #), с которого начинать нумерацию
+        mode (str): Режим работы функции. Либо 'draft', в этом случае создаться копия файла, либо 'final' в этом случае изменения будут сделаны в исходном файле. Default to 'draft'
+
+    Returns:
+        None
+
+    Example:
+        Для link_type="markdown":
+            &emsp;[Глава-1](#Глава-1)<br>
+            &emsp;&emsp;[Подглава-1.1](#Подглава-1.1)<br>
+        Для link_type="html":
+            &emsp;<a href="Глава-1">Глава 1</a><br>
+            &emsp;&emsp;<a href="#Подглава-1.1">Подглава 1.1</a><br>
+
+        - Вариант, который работает почти везде
+            в оглавлении пишем
+            <a href="#лава-1">Ссылка на главу 1</a>
+            в названии главы пишем
+            # Глава 1 <a name="Глава-1"></a>
+        - Вариант, который не везде работает
+            в оглавлении пишем
+            [Ссылка на главу 1](#name-id)
+            в названии главы пишем
+            <a class="anchor" id="Название-главы"></a>
+            ### Название главы
+        - Упрощенный вариант, работает только в jupyter notebook
+            в оглавлении пишем
+            [Ссылка на главу 1](#Глава-1)
+            в названии главы пишем
+            # Глава 1
+    """
+    if mode not in ['draft', 'final']:
+        raise ValueError(
+            "Invalid mode. Mode must be either 'draft' or 'final'.")
+    if mode == 'draft':
+        notebook_path = 'temp_' + notebook_path
+
+    def is_markdown(it): return "markdown" == it["cell_type"]
+    def is_title(it): return it.strip().startswith(
+        "#") and it.strip().lstrip("#").lstrip()
+    toc = ['**Оглавление**<a name="ref_to_toc"></a>\n\n',]
+    with open(notebook_path, 'r', encoding='utf-8') as in_f:
+        nb_json = json.load(in_f)
+    for cell in filter(is_markdown, nb_json["cells"]):
+        for line in filter(is_title, cell["source"]):
+            level = line.count("#")
+            if level < start_level or line.endswith('<skip>'):
+                continue
+            line = line.strip()
+            indent = indent_char * (level * 2 - 3)
+            title_for_ref = re.findall(
+                r'<a name=[\"\']+(.*)[\"\']+></a>', line)
+            if not title_for_ref:
+                raise ValueError(
+                    f'В строке "{line}" нет ссылки для создания оглавления')
+            title_for_ref = title_for_ref[0]
+            title = re.sub(r'<a.*</a>', '', line).lstrip("#").lstrip()
+            if link_type == "markdown":
+                toc_line = f"{indent}[{title}](#{title_for_ref})  \n"
+            elif link_type == "html":
+                toc_line = f"{indent}<a href='#{title_for_ref}'>{title}</a>  \n"
+            else:
+                raise ValueError(
+                    "Неправильный тип ссылки. Должно быть 'markdown' или 'html'.")
+            toc.append(toc_line)
+    toc_cell = v4.new_markdown_cell([''.join(toc)])
+    nb_json['cells'].insert(0, toc_cell)
+    # display(nb_json)
+    # Convert nb_json to nbformat object
+    nb = nbformat.reads(json.dumps(nb_json), as_version=4)
+
+    # Save the nbformat object to the file
+    if mode == 'draft':
+        output_filename = notebook_path
+    else:
+        output_filename = notebook_path
+    with open(output_filename, 'w', encoding='utf-8') as out_f:
+        nbformat.write(nb, out_f, version=4)
+
+
+def make_headers_link_and_toc(notebook_path: str, mode: str = 'draft', start_level: int = 2, link_type_header: str = "name", indent_char: str = "&emsp;", link_type_toc: str = "html", is_make_headers_link: bool = True, is_make_toc: bool = True):
+    ''' 
+    Функция добавляет ссылки в название headers и создает содеражние
+
+    Args:
+        - notebook_path (str): Путь к ноутбуку.
+        - mode (str): Режим работы функции. Либо 'draft', в этом случае создаться копия файла, либо 'final' в этом случае изменения будут сделаны в исходном файле. Default to 'draft'
+        - link_type_header (str, optional): Тип ссылки в заголовке. Может быть "name" или "id". Defaults to "name".
+        - start_level (int): Уровень глав (количество #), с которого начинать нумерацию
+        - indent_char (str, optional): Символ для отступа в оглавлении. Defaults to "&emsp;".
+        - link_type_toc (str, optional): Тип ссылки в оглавлении на заголовок. Может быть "markdown" или "html". Defaults to "html".
+        - start_level (int): Уровень глав (количество #), с которого начинать нумерацию
+        - is_make_headers_link (book): Делать ссылки в заголовках. Defaults to 'True'
+        - is_make_toc (book): Делать оглавление. Defaults to 'True'
+    Returns:
+        None    
+    Example:
+        Для link_type="markdown":
+            &emsp;[Глава-1](#Глава-1)<br>
+            &emsp;&emsp;[Подглава-1.1](#Подглава-1.1)<br>
+        Для link_type="html":
+            &emsp;<a href="Глава-1">Глава 1</a><br>
+            &emsp;&emsp;<a href="#Подглава-1.1">Подглава 1.1</a><br>
+
+        - Вариант, который работает почти везде
+            в оглавлении пишем
+            <a href="#лава-1">Ссылка на главу 1</a>
+            в названии главы пишем
+            # Глава 1 <a name="Глава-1"></a>
+        - Вариант, который не везде работает
+            в оглавлении пишем
+            [Ссылка на главу 1](#name-id)
+            в названии главы пишем
+            <a class="anchor" id="Название-главы"></a>
+            ### Название главы
+        - Упрощенный вариант, работает только в jupyter notebook
+            в оглавлении пишем
+            [Ссылка на главу 1](#Глава-1)
+            в названии главы пишем
+            # Глава 1
+    '''
+    if mode not in ['draft', 'final']:
+        raise ValueError(
+            "Invalid mode. Mode must be either 'draft' or 'final'.")
+    if is_make_headers_link:
+        add_links_and_numbers_to_headings(
+            notebook_path, mode=mode, link_type=link_type_header, start_level=start_level)
+    if is_make_toc:
+        generate_toc(notebook_path, mode=mode, link_type=link_type_toc,
+                     start_level=start_level, indent_char=indent_char)
+
+def add_conclusions_and_anomalies(notebook_path, mode, link_type):
+    """
+    This function adds conclusions and anomalies sections to a Jupyter notebook.
+
+    Args:
+        notebook_path (str): The path to the Jupyter notebook file.
+        mode (str): The mode of the output file, either 'draft' or 'final'.
+        link_type (str): The type of link to use, either 'html' or 'markdown'.
+    """
+    if mode not in ['draft', 'final']:
+        raise ValueError("Invalid mode. Mode must be either 'draft' or 'final'.")
+    
+    with open(notebook_path, 'r', encoding='utf-8') as in_f:
+        nb_json = json.load(in_f)
+
+    conclusions = ['**Главные выводы:**<a name="ref-to-conclusions"></a>\n']
+    anomalies = ['**Аномалии и особенности в данных:**<a name="ref-to-anomalies"></a>\n']
+    
+    for cell in nb_json["cells"]:
+        cell_has_ref_to_toc = False
+        source = cell["source"]
+        new_source = []
+        for line in source:                  
+            if line.strip().startswith("_conclusion_") or line.strip().startswith("_anomaly_"):
+                cell["cell_type"] = "markdown"
+                if line.strip().startswith("_conclusion_"):
+                    conclusion_or_anomaly = line.strip().replace("_conclusion_ ", '')
+                if line.strip().startswith("_anomaly_"):
+                    conclusion_or_anomaly = line.strip().replace("_anomaly_ ", '')                    
+                conclusion_or_anomaly_for_ref = conclusion_or_anomaly.replace(' ', '-').replace('.', '-').replace(',', '-')
+                if link_type == "html":
+                    toc_conclusion_or_anomaly = f"- <a href='#{conclusion_or_anomaly_for_ref}'>{conclusion_or_anomaly}</a>  \n"                
+                elif link_type == "markdown":
+                    toc_conclusion_or_anomaly = f"[- {conclusion_or_anomaly}](#{conclusion_or_anomaly_for_ref})  \n"
+                else:
+                    raise ValueError("Неправильный тип ссылки. Должно быть 'markdown' или 'html'.")                
+                if link_type == "html":
+                    conclusion_or_anomaly_for_ref = f"<a name='{conclusion_or_anomaly_for_ref}'></a>"
+                elif link_type == "markdown":
+                    conclusion_or_anomaly_for_ref = f"<a class='anchor' id='{conclusion_or_anomaly_for_ref}'></a>"
+                else:
+                    raise ValueError("Неправильный тип ссылки. Должно быть 'name' или 'id'.")               
+            
+                if line.strip().startswith("_conclusion_"):
+                    conclusions.append(toc_conclusion_or_anomaly)
+                    if not cell_has_ref_to_toc:
+                        conclusion_or_anomaly_for_ref += '\n<a href="#ref-to-conclusions">вернуться к оглавлению</a>'
+                if line.strip().startswith("_anomaly_"):
+                    anomalies.append(toc_conclusion_or_anomaly)  
+                    if not cell_has_ref_to_toc:
+                        conclusion_or_anomaly_for_ref += '\n<a href="#ref-to-anomalies">вернуться к оглавлению</a>'
+                new_source.append(conclusion_or_anomaly_for_ref)
+                cell_has_ref_to_toc = True                
+            else:
+                new_source.append(line)                
+        cell["source"] = new_source
+        
+    conclusions_cell = v4.new_markdown_cell([''.join(conclusions)])
+    anomalies_cell = v4.new_markdown_cell([''.join(anomalies)])
+    nb_json['cells'].insert(0, conclusions_cell)
+    nb_json['cells'].insert(0, anomalies_cell)
+    
+    # Convert nb_json to nbformat object
+    nb = nbformat.reads(json.dumps(nb_json), as_version=4)
+
+    # Save the nbformat object to the file
+    if mode == 'draft':
+        output_filename = 'temp_' + notebook_path
+    else:
+        output_filename = notebook_path
+    with open(output_filename, 'w', encoding='utf-8') as out_f:
+        nbformat.write(nb, out_f, version=4)
