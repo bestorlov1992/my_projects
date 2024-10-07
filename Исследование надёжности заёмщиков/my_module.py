@@ -6667,8 +6667,15 @@ def add_links_and_numbers_to_headings(notebook_path: str, mode: str = 'draft', l
     if link_type not in ['name', 'id']:
         raise ValueError(
             "Invalid link_type. link_type must be either 'name' or 'id'.")
-    with open(notebook_path, 'r', encoding='utf-8') as in_f:
-        nb_json = json.load(in_f)
+    try:
+        with open(notebook_path, 'r', encoding='utf-8') as in_f:
+            nb_json = json.load(in_f)
+    except FileNotFoundError:
+        print(f"Error: File not found - {notebook_path}")
+        return
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON format - {notebook_path}")
+        return
     regex_for_sub = re.compile(r'[^0-9a-zA-Zа-яА-Я]')
     # headers = []
     # Создаем список счетчиков для каждого уровня заголовка
@@ -6785,8 +6792,15 @@ def generate_toc(notebook_path: str, mode: str = 'draft', indent_char: str = "&e
     def is_title(it): return it.strip().startswith(
         "#") and it.strip().lstrip("#").lstrip()
     toc = ['**Оглавление**<a name="ref-to-toc"></a>\n\n',]
-    with open(notebook_path, 'r', encoding='utf-8') as in_f:
-        nb_json = json.load(in_f)
+    try:
+        with open(notebook_path, 'r', encoding='utf-8') as in_f:
+            nb_json = json.load(in_f)
+    except FileNotFoundError:
+        print(f"Error: File not found - {notebook_path}")
+        return
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON format - {notebook_path}")
+        return
     for cell in filter(is_markdown, nb_json["cells"]):
         for line in filter(is_title, cell["source"]):
             level = line.count("#")
@@ -6820,6 +6834,7 @@ def generate_toc(notebook_path: str, mode: str = 'draft', indent_char: str = "&e
     with open(output_filename, 'w', encoding='utf-8') as out_f:
         nbformat.write(nb, out_f, version=4)
     print(f"Table of content added to {output_filename}")
+
 
 def make_headers_link_and_toc(notebook_path: str, mode: str = 'draft', start_level: int = 2, link_type_header: str = "name", indent_char: str = "&emsp;", link_type_toc: str = "html", is_make_headers_link: bool = True, is_make_toc: bool = True):
     ''' 
@@ -6888,6 +6903,12 @@ def add_conclusions_and_anomalies(notebook_path: str, mode: str = 'draft', link_
         mode (str): The mode of the output file, either 'draft' or 'final'. Defaults to 'draft'.
         link_type (str): The type of link to use, either 'html' or 'markdown'. Defaults to 'html'.
         order (dict): dict of lists with ordered  conclusions and anomalie (key: conclusions and anomalies)
+
+    Examples:
+        order = dict(
+                    conclusions =[ 'Женщины чаще возвращают кредит, чем мужчины.']
+                    , anomalies = ['В датафрейме есть строки дубликаты. 54 строки. Меньше 1 % от всего датафрейма.  ']
+                )
     """
     if mode not in ['draft', 'final']:
         raise ValueError(
@@ -6896,8 +6917,15 @@ def add_conclusions_and_anomalies(notebook_path: str, mode: str = 'draft', link_
         raise ValueError(
             "Invalid link_type. link_type must be either 'html' or 'markdown'.")
 
-    with open(notebook_path, 'r', encoding='utf-8') as in_f:
-        nb_json = json.load(in_f)
+    try:
+        with open(notebook_path, 'r', encoding='utf-8') as in_f:
+            nb_json = json.load(in_f)
+    except FileNotFoundError:
+        print(f"Error: File not found - {notebook_path}")
+        return
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON format - {notebook_path}")
+        return
     regex_for_sub = re.compile(r'[^0-9a-zA-Zа-яА-Я]')
     conclusions = []
     anomalies = []
@@ -7114,14 +7142,9 @@ def correct_notebook_text(notebook_path: str, save_mode: str = 'final', work_mod
         # Создаем словарь, где ключами являются слова, а значениями - списки их позиций в тексте
         word_positions = {}
         for word in words:
-            if word in word_positions:
-                if word_positions[word][-1] + 1 < len(text):
-                    word_positions[word].append(
-                        text.find(word, word_positions[word][-1] + 1))
-                else:
-                    word_positions[word].append(text.find(word))
-            else:
-                word_positions[word] = [text.find(word)]
+            pattern = r'\b' + word + r'\b'
+            indices = [m.start() for m in re.finditer(pattern, text)]
+            word_positions[word] = indices
         # Исправляем ошибки в словах
         corrected_words = []
         max_attempts = 5  # Максимальное количество попыток
@@ -7270,3 +7293,76 @@ def correct_notebook_text(notebook_path: str, save_mode: str = 'final', work_mod
     print(f"Corrected notebook saved to {output_filename}")
 
 
+def add_hypotheses_links_and_toc(notebook_path: str, mode: str = 'draft', link_type: str = 'html'):
+    """
+    Добавляет список гипотез в начало ноутбука Jupyter и ссылки на гипотезы. 
+
+    Args:
+        notebook_path (str): путь к ноутбуку Jupyter в формате JSON.
+        mode (str, optional): режим работы функции. Defaults to 'draft'.
+        link_type (str, optional): тип ссылок, которые будут добавлены в ноутбук. Defaults to 'html'.
+
+    Raises:
+        ValueError: если mode или link_type имеют недопустимые значения.
+    """
+    def is_markdown(it):
+        return "markdown" == it["cell_type"]
+
+    if mode not in ['draft', 'final']:
+        raise ValueError(
+            "Invalid mode. Mode must be either 'draft' or 'final'.")
+    if link_type not in ['html', 'markdown']:
+        raise ValueError(
+            "Invalid link_type. link_type must be either 'html' or 'markdown'.")
+    try:
+        with open(notebook_path, 'r', encoding='utf-8') as in_f:
+            nb_json = json.load(in_f)
+    except FileNotFoundError:
+        print(f"Error: File not found - {notebook_path}")
+        return
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON format - {notebook_path}")
+        return
+    regex_for_sub = re.compile(r'[^0-9a-zA-Zа-яА-Я]')
+    toc_hypotheses = []
+    for cell in filter(is_markdown, nb_json["cells"]):
+        source = cell["source"]
+        new_source = []
+        for line in source:
+            if line.strip().startswith("_hypothesis_"):
+                hypothesis = line.strip().replace("_hypothesis_ ", '')
+                hypothesis_title = hypothesis.strip().strip('**')
+                hypothesis_for_ref = regex_for_sub.sub(
+                    '-', hypothesis_title)
+                if link_type == "html":
+                    toc_hypotheses.append(
+                        f"- <a href='#{hypothesis_for_ref}'>{hypothesis_title}</a>  \n**Результат:**  \n")
+                    hypothesis_for_ref = f"{hypothesis}<a name='{hypothesis_for_ref}'></a>"
+                elif link_type == "markdown":
+                    toc_hypotheses.append(
+                        f"[- {hypothesis_title}](#{hypothesis_for_ref})  \n**Результат:**  \n")
+                    hypothesis_for_ref = f"{hypothesis}<a class='anchor' id='{hypothesis_for_ref}'></a>"
+                else:
+                    raise ValueError(
+                        "Неправильный тип ссылки. Должно быть 'markdown' или 'html'.")
+                hypothesis_for_ref += '  \n<a href="#ref-to-toc-hypotheses">вернуться к оглавлению</a>'
+                new_source.append(hypothesis_for_ref)
+            else:
+                new_source.append(line)
+        cell["source"] = new_source
+    toc_hypotheses = [
+        '**Результаты проверки гипотез:**<a name="ref-to-toc-hypotheses"></a>\n\n',] + toc_hypotheses
+    hypotheses_cell = v4.new_markdown_cell([''.join(toc_hypotheses)])
+    nb_json['cells'].insert(0, hypotheses_cell)
+    # Convert nb_json to nbformat object
+    nb = nbformat.reads(json.dumps(nb_json), as_version=4)
+    # Save the nbformat object to the file
+    if mode == 'draft':
+        output_filename_splited = notebook_path.split('.')
+        output_filename_splited[-2] += '_temp'
+        output_filename = '.'.join(output_filename_splited)
+    else:
+        output_filename = notebook_path
+    with open(output_filename, 'w', encoding='utf-8') as out_f:
+        nbformat.write(nb, out_f, version=4)
+    print(f"Corrected notebook saved to {output_filename}")
