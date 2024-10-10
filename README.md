@@ -4,7 +4,7 @@ This repository contains a collection of my projects, showcasing my work in data
 
 ## Projects
 
-* **Исследование надёжности заёмщиков** ([Исследование надёжности заёмщиков](projects/Исследование надёжности заёмщиков))
+* **Исследование надёжности заёмщиков** ([Исследование надёжности заёмщиков](./projects/Исследование надёжности заёмщиков))
 
 ## Getting Started
 
